@@ -84,99 +84,99 @@ export default function EditarNegocio({
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-neutral-50 p-6">
-        <p className="text-sm text-neutral-500">Cargando...</p>
+      <main className="min-h-screen bg-neutral-50 p-6 text-neutral-900">
+        <p className="text-sm text-neutral-600">Cargando...</p>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-neutral-50 px-4 py-8">
+    <main className="min-h-screen bg-neutral-50 px-4 py-8 text-neutral-900">
       <div className="mx-auto max-w-xl">
         <div className="mb-6">
           <button
             onClick={() => router.push("/admin")}
-            className="text-sm text-neutral-500 hover:text-neutral-900"
+            className="text-sm font-medium text-neutral-600 hover:text-neutral-900"
           >
             ← Volver
           </button>
 
-          <h1 className="mt-4 text-2xl font-semibold">
+          <h1 className="mt-4 text-2xl font-semibold text-neutral-900">
             Editar negocio
           </h1>
 
-          <p className="mt-1 text-sm text-neutral-500">
+          <p className="mt-1 text-sm text-neutral-600">
             Modificá la información que verá el cliente.
           </p>
         </div>
 
-        <div className="space-y-5 rounded-2xl bg-white p-6 shadow-sm">
+        <div className="space-y-5 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-neutral-200">
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
               Nombre del negocio
             </label>
 
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="Nombre del negocio"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
               Link directo de reseñas de Google
             </label>
 
             <input
               value={googleUrl}
               onChange={(e) => setGoogleUrl(e.target.value)}
-              className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="Pegá acá el enlace de reseñas de Google"
             />
 
-            <p className="mt-1.5 text-xs leading-5 text-neutral-400">
+            <p className="mt-2 text-xs leading-5 text-neutral-600">
               Pegá el enlace que Google genera en “Conseguir más reseñas”.
               No necesitamos acceso a la cuenta de Google del negocio.
             </p>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
               Instagram
             </label>
 
             <input
               value={instagramUrl}
               onChange={(e) => setInstagramUrl(e.target.value)}
-              className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="https://instagram.com/..."
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
               WhatsApp
             </label>
 
             <input
               value={whatsapp}
               onChange={(e) => setWhatsapp(e.target.value)}
-              className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="https://wa.me/..."
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium">
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
               URL del logo
             </label>
 
             <input
               value={logoUrl}
               onChange={(e) => setLogoUrl(e.target.value)}
-              className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm outline-none focus:border-neutral-500"
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="https://..."
             />
           </div>
