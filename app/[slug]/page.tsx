@@ -160,6 +160,21 @@ export default function BusinessPage({
     .join("")
     .toUpperCase();
 
+  async function guardarRating(rating: number) {
+    const { error } = await supabase.from("feedback").insert({
+      rating,
+      business_id: businessId,
+      message: null,
+    });
+
+    if (error) {
+      console.error(error);
+      return false;
+    }
+
+    return true;
+  }
+
   async function enviarFeedback() {
     if (!selectedRating || !message.trim()) {
       return;
@@ -184,10 +199,21 @@ export default function BusinessPage({
     setSent(true);
   }
 
-  function seleccionarRating(rating: number) {
+  async function seleccionarRating(rating: number) {
     setSelectedRating(rating);
     setMessage("");
     setSent(false);
+
+    // Las valoraciones positivas se registran inmediatamente.
+    // Las valoraciones de 2–3 estrellas se registran al enviar
+    // el comentario privado.
+    if (rating >= 4) {
+      const guardado = await guardarRating(rating);
+
+      if (!guardado) {
+        alert("No se pudo registrar la valoración.");
+      }
+    }
   }
 
   function volverInicio() {
