@@ -5,8 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { supabase } from "../../../../lib/supabase";
 
-const PRODUCTION_URL =
-  "https://guesttap-8d5kqymf1-guest-tap.vercel.app";
+const PRODUCTION_URL = "https://guesttap-five.vercel.app";
 
 export default function QRPage() {
   const params = useParams();
