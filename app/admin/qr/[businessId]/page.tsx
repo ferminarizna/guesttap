@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import { supabase } from "../../../../lib/supabase";
 
+const PRODUCTION_URL =
+  "https://guesttap-8d5kqymf1-guest-tap.vercel.app";
+
 export default function QRPage() {
   const params = useParams();
   const router = useRouter();
@@ -36,7 +39,7 @@ export default function QRPage() {
       setBusinessName(data.name);
       setSlug(data.slug);
 
-      const url = `${window.location.origin}/${data.slug}`;
+      const url = `${PRODUCTION_URL}/${data.slug}`;
 
       const qrDataUrl = await QRCode.toDataURL(url, {
         width: 800,
@@ -99,7 +102,7 @@ export default function QRPage() {
           </div>
 
           <p className="mt-6 break-all text-center text-sm text-neutral-500">
-            {window.location.origin}/{slug}
+            {PRODUCTION_URL}/{slug}
           </p>
 
           <button
