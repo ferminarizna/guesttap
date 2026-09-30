@@ -1,17 +1,14 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
-export default function FeedbackPage() {
+function FeedbackForm() {
   const searchParams = useSearchParams();
 
-  const rating =
-    Number(searchParams.get("rating")) || 0;
-
-  const businessId =
-    Number(searchParams.get("business")) || 0;
+  const rating = Number(searchParams.get("rating")) || 0;
+  const businessId = Number(searchParams.get("business")) || 0;
 
   const [mensaje, setMensaje] = useState("");
   const [enviado, setEnviado] = useState(false);
@@ -62,7 +59,6 @@ export default function FeedbackPage() {
   return (
     <main className="min-h-screen bg-white px-6 py-12">
       <div className="max-w-md mx-auto">
-
         <div className="text-center mb-10">
           <div className="text-4xl mb-4">💬</div>
 
@@ -103,8 +99,23 @@ export default function FeedbackPage() {
         <p className="text-center text-xs text-gray-400 mt-8">
           Powered by GuestTap
         </p>
-
       </div>
     </main>
+  );
+}
+
+export default function FeedbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-white flex items-center justify-center">
+          <p className="text-sm text-gray-500">
+            Cargando...
+          </p>
+        </main>
+      }
+    >
+      <FeedbackForm />
+    </Suspense>
   );
 }
