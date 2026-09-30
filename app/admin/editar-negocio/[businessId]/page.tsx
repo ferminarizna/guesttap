@@ -190,6 +190,6 @@ export default function EditarNegocio({
           </button>
         </div>
       </div>
-    </main>
-  );
+  </main>
+);
 }

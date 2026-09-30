@@ -1,141 +1,183 @@
 "use client";
 
-import { supabase } from "../../../lib/supabase";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "../../../lib/supabase";
 
-export default function AdminPage() {
-  const [nombre, setNombre] = useState("");
-  const [slug, setSlug] = useState("");
-  const [google, setGoogle] = useState("");
-  const [instagram, setInstagram] = useState("");
-  const [whatsapp, setWhatsapp] = useState("");
-
-  function generarSlug(texto: string) {
-    return texto
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
-  }
-
-  async function crearNegocio() {
-    if (!nombre.trim()) return;
-
-    const { error } = await supabase
-      .from("businesses")
-      .insert({
-        name: nombre,
-        slug: slug,
-        google_url: google || null,
-        instagram_url: instagram || null,
-        whatsapp: whatsapp || null,
-      });
-
-if (error) {
-  console.error(JSON.stringify(error, null, 2));
-  alert(
-    `Error: ${error.message}\nCódigo: ${error.code}\nDetalle: ${error.details}`
-  );
-  return;
+function generarSlug(texto: string) {
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 }
 
-    alert("Negocio creado correctamente.");
+function convertirWhatsApp(valor: string) {
+  const numero = valor.replace(/\D/g, "");
 
-    setNombre("");
-    setSlug("");
-    setGoogle("");
-    setInstagram("");
-    setWhatsapp("");
+  if (!numero) {
+    return null;
+  }
+
+  if (numero.startsWith("549")) {
+    return `https://wa.me/${numero}`;
+  }
+
+  if (numero.startsWith("54")) {
+    return `https://wa.me/${numero}`;
+  }
+
+  return `https://wa.me/549${numero}`;
+}
+
+export default function CrearNegocio() {
+  const router = useRouter();
+
+  const [name, setName] = useState("");
+  const [googleUrl, setGoogleUrl] = useState("");
+  const [instagramUrl, setInstagramUrl] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
+  const [logoUrl, setLogoUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function crearNegocio() {
+    if (!name.trim()) {
+      alert("Ingresá el nombre del negocio.");
+      return;
+    }
+
+    setSaving(true);
+
+    const slug = generarSlug(name);
+
+    const { error } = await supabase.from("businesses").insert({
+      name: name.trim(),
+      slug,
+      google_url: googleUrl.trim() || null,
+      instagram_url: instagramUrl.trim() || null,
+      whatsapp: convertirWhatsApp(whatsapp),
+      logo_url: logoUrl.trim() || null,
+    });
+
+    setSaving(false);
+
+    if (error) {
+      console.error(error);
+      alert("No se pudo crear el negocio.");
+      return;
+    }
+
+    alert("Negocio creado correctamente.");
+    router.push("/admin");
   }
 
   return (
-    <main className="min-h-screen bg-neutral-50 px-6 py-10 text-neutral-900">
+    <main className="min-h-screen bg-neutral-50 px-4 py-8 text-neutral-900">
       <div className="mx-auto max-w-xl">
+        <div className="mb-6">
+          <button
+            onClick={() => router.push("/admin")}
+            className="text-sm font-medium text-neutral-600 hover:text-neutral-900"
+          >
+            ← Volver
+          </button>
 
-        <h1 className="text-3xl font-semibold">
-          Crear negocio
-        </h1>
+          <h1 className="mt-4 text-2xl font-semibold text-neutral-900">
+            Crear negocio
+          </h1>
 
-        <p className="mt-2 text-sm text-neutral-500">
-          Cargá los datos del establecimiento.
-        </p>
+          <p className="mt-1 text-sm text-neutral-600">
+            Cargá los datos del establecimiento.
+          </p>
+        </div>
 
-        <div className="mt-8 space-y-5">
-
+        <div className="space-y-5 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-neutral-200">
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
               Nombre del negocio
             </label>
 
             <input
-              value={nombre}
-              onChange={(e) => {
-                setNombre(e.target.value);
-                setSlug(generarSlug(e.target.value));
-              }}
-              placeholder="Ej. Hotel Albatros"
-              className="w-full rounded-xl border border-neutral-200 bg-white p-4 outline-none focus:ring-2 focus:ring-black"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
+              placeholder="Ej: Ramos Generales El Almacén"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">
-              URL
-            </label>
-
-            <div className="rounded-xl border border-neutral-200 bg-neutral-100 p-4 text-sm text-neutral-500">
-              /{slug || "nombre-del-negocio"}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">
-              Google Maps
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
+              Link directo de reseñas de Google
             </label>
 
             <input
-              value={google}
-              onChange={(e) => setGoogle(e.target.value)}
-              placeholder="Pegá el enlace de Google Maps"
-              className="w-full rounded-xl border border-neutral-200 bg-white p-4 outline-none focus:ring-2 focus:ring-black"
+              value={googleUrl}
+              onChange={(e) => setGoogleUrl(e.target.value)}
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
+              placeholder="Pegá acá el enlace de reseñas de Google"
             />
+
+            <p className="mt-2 text-xs leading-5 text-neutral-600">
+              Es el enlace que Google genera en “Conseguir más reseñas”.
+            </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
               Instagram
             </label>
 
             <input
-              value={instagram}
-              onChange={(e) => setInstagram(e.target.value)}
+              value={instagramUrl}
+              onChange={(e) => setInstagramUrl(e.target.value)}
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="https://instagram.com/..."
-              className="w-full rounded-xl border border-neutral-200 bg-white p-4 outline-none focus:ring-2 focus:ring-black"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
               WhatsApp
             </label>
 
             <input
               value={whatsapp}
               onChange={(e) => setWhatsapp(e.target.value)}
-              placeholder="https://wa.me/..."
-              className="w-full rounded-xl border border-neutral-200 bg-white p-4 outline-none focus:ring-2 focus:ring-black"
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
+              placeholder="Ej: +54 9 2901 64-9560"
             />
+
+            <p className="mt-2 text-xs leading-5 text-neutral-600">
+              Podés ingresar solamente el número. GuestTap genera
+              automáticamente el enlace de WhatsApp.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-neutral-800">
+              URL del logo
+            </label>
+
+            <input
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
+              placeholder="https://..."
+            />
+
+            <p className="mt-2 text-xs leading-5 text-neutral-600">
+              URL pública de la imagen del logo.
+            </p>
           </div>
 
           <button
             onClick={crearNegocio}
-            disabled={!nombre.trim()}
-            className="w-full rounded-xl bg-black py-4 font-medium text-white disabled:opacity-40"
+            disabled={saving}
+            className="w-full rounded-xl bg-neutral-900 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Crear negocio
+            {saving ? "Creando..." : "Crear negocio"}
           </button>
-
         </div>
       </div>
     </main>
