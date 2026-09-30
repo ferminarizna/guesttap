@@ -46,7 +46,7 @@ export default function AdminPage() {
 
     const counts: Record<number, number> = {};
 
-    (countsData || []).forEach((item) => {
+    (countsData || []).forEach((item: { business_id: number; feedback_count: number }) => {
       counts[item.business_id] = Number(item.feedback_count);
     });
 
