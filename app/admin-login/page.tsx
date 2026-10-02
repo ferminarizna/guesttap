@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
+const ADMIN_EMAIL = "ariznafermin@gmail.com";
+
 export default function AdminLoginPage() {
   const router = useRouter();
 
@@ -16,24 +18,31 @@ export default function AdminLoginPage() {
     setError("");
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (normalizedEmail !== ADMIN_EMAIL) {
+      setError("Esta cuenta no tiene acceso al panel de administración.");
+      setLoading(false);
+      return;
+    }
+
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
       password,
     });
 
-    if (error) {
+    if (signInError) {
       setError("Email o contraseña incorrectos.");
       setLoading(false);
       return;
     }
 
-    router.push("/admin");
+    router.replace("/admin");
   }
 
   return (
     <main className="min-h-screen bg-neutral-50 px-6 py-12 text-neutral-900">
       <div className="mx-auto max-w-md">
-
         <div className="text-center">
           <h1 className="text-3xl font-semibold">
             GuestTap
@@ -45,9 +54,8 @@ export default function AdminLoginPage() {
         </div>
 
         <div className="mt-10 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-neutral-200">
-
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="mb-2 block text-sm font-medium">
               Email
             </label>
 
@@ -56,12 +64,13 @@ export default function AdminLoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@email.com"
+              autoComplete="email"
               className="w-full rounded-xl border border-neutral-200 bg-white p-4 outline-none focus:ring-2 focus:ring-black"
             />
           </div>
 
           <div className="mt-5">
-            <label className="block text-sm font-medium mb-2">
+            <label className="mb-2 block text-sm font-medium">
               Contraseña
             </label>
 
@@ -70,7 +79,13 @@ export default function AdminLoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
+              autoComplete="current-password"
               className="w-full rounded-xl border border-neutral-200 bg-white p-4 outline-none focus:ring-2 focus:ring-black"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && email && password && !loading) {
+                  iniciarSesion();
+                }
+              }}
             />
           </div>
 
@@ -87,9 +102,7 @@ export default function AdminLoginPage() {
           >
             {loading ? "Ingresando..." : "Ingresar"}
           </button>
-
         </div>
-
       </div>
     </main>
   );
