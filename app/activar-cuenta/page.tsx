@@ -14,40 +14,75 @@ export default function ActivarCuentaPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    async function prepararCuenta() {
-      const params = new URLSearchParams(window.location.search);
+    let mounted = true;
 
-      const tokenHash = params.get("token_hash");
-      const type = params.get("type");
+    async function comprobarSesion() {
+      // Supabase puede devolver errores directamente en el hash
+      const hash = window.location.hash;
 
-      if (tokenHash && type === "invite") {
-        const { error } = await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: "invite",
-        });
+      if (hash.includes("error=")) {
+        const params = new URLSearchParams(hash.substring(1));
+        const errorCode = params.get("error_code");
 
-        if (error) {
-          console.error(error);
-          setError("El enlace de invitación no es válido o ya venció.");
-          setLoading(false);
-          return;
+        if (errorCode === "otp_expired") {
+          setError(
+            "El enlace de invitación o recuperación venció. Necesitamos enviar uno nuevo."
+          );
+        } else {
+          setError("El enlace de acceso no es válido.");
         }
+
+        setLoading(false);
+        return;
       }
 
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      if (!session) {
-        setError("No se pudo validar la invitación.");
+      if (!mounted) return;
+
+      if (session) {
         setLoading(false);
         return;
       }
 
-      setLoading(false);
+      // Esperamos a que Supabase procese el enlace de autenticación.
+      const timeout = setTimeout(async () => {
+        const {
+          data: { session: currentSession },
+        } = await supabase.auth.getSession();
+
+        if (!mounted) return;
+
+        if (currentSession) {
+          setLoading(false);
+        } else {
+          setError("No se pudo validar el enlace de acceso.");
+          setLoading(false);
+        }
+      }, 1000);
+
+      return () => clearTimeout(timeout);
     }
 
-    prepararCuenta();
+    comprobarSesion();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+
+      if (session) {
+        setLoading(false);
+        setError("");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   async function crearPassword() {
@@ -71,7 +106,7 @@ export default function ActivarCuentaPage() {
 
     if (error) {
       console.error(error);
-      setError("No se pudo crear la contraseña.");
+      setError("No se pudo establecer la contraseña.");
       setSaving(false);
       return;
     }
@@ -83,13 +118,13 @@ export default function ActivarCuentaPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f7f7f5] px-5">
         <p className="text-sm text-neutral-500">
-          Verificando invitación...
+          Verificando acceso...
         </p>
       </main>
     );
   }
 
-  if (error && !password) {
+  if (error) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f7f7f5] px-5">
         <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-sm ring-1 ring-black/5">
@@ -170,7 +205,7 @@ export default function ActivarCuentaPage() {
             disabled={saving}
             className="w-full rounded-2xl bg-black px-5 py-4 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {saving ? "Creando cuenta..." : "Crear contraseña"}
+            {saving ? "Guardando..." : "Crear contraseña"}
           </button>
         </div>
       </div>
