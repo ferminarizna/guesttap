@@ -13,24 +13,6 @@ function generarSlug(texto: string) {
     .replace(/^-+|-+$/g, "");
 }
 
-function convertirWhatsApp(valor: string) {
-  const numero = valor.replace(/\D/g, "");
-
-  if (!numero) {
-    return null;
-  }
-
-  if (numero.startsWith("549")) {
-    return `https://wa.me/${numero}`;
-  }
-
-  if (numero.startsWith("54")) {
-    return `https://wa.me/${numero}`;
-  }
-
-  return `https://wa.me/549${numero}`;
-}
-
 export default function CrearNegocio() {
   const router = useRouter();
 
@@ -47,29 +29,74 @@ export default function CrearNegocio() {
       return;
     }
 
-    setSaving(true);
-
-    const slug = generarSlug(name);
-
-    const { error } = await supabase.from("businesses").insert({
-      name: name.trim(),
-      slug,
-      google_url: googleUrl.trim() || null,
-      instagram_url: instagramUrl.trim() || null,
-      whatsapp: convertirWhatsApp(whatsapp),
-      logo_url: logoUrl.trim() || null,
-    });
-
-    setSaving(false);
-
-    if (error) {
-      console.error(error);
-      alert("No se pudo crear el negocio.");
+    if (saving) {
       return;
     }
 
-    alert("Negocio creado correctamente.");
-    router.push("/admin");
+    setSaving(true);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        alert(
+          "La sesión de administrador expiró. Volvé a iniciar sesión."
+        );
+        router.push("/admin-login");
+        return;
+      }
+
+      const response = await fetch(
+        "/api/admin/crear-negocio",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            name: name.trim(),
+            google_url: googleUrl.trim(),
+            instagram_url: instagramUrl.trim(),
+            whatsapp: whatsapp.trim(),
+            logo_url: logoUrl.trim(),
+          }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error(
+          "Error creando negocio:",
+          result
+        );
+
+        alert(
+          result.error ||
+            "No se pudo crear el negocio."
+        );
+
+        return;
+      }
+
+      alert("Negocio creado correctamente.");
+
+      router.push("/admin");
+    } catch (error) {
+      console.error(
+        "Error inesperado creando negocio:",
+        error
+      );
+
+      alert(
+        "Ocurrió un error al crear el negocio. Intentá nuevamente."
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -100,7 +127,9 @@ export default function CrearNegocio() {
 
             <input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) =>
+                setName(e.target.value)
+              }
               className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="Ej: Ramos Generales El Almacén"
             />
@@ -113,13 +142,16 @@ export default function CrearNegocio() {
 
             <input
               value={googleUrl}
-              onChange={(e) => setGoogleUrl(e.target.value)}
+              onChange={(e) =>
+                setGoogleUrl(e.target.value)
+              }
               className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="Pegá acá el enlace de reseñas de Google"
             />
 
             <p className="mt-2 text-xs leading-5 text-neutral-600">
-              Es el enlace que Google genera en “Conseguir más reseñas”.
+              Es el enlace que Google genera en
+              “Conseguir más reseñas”.
             </p>
           </div>
 
@@ -130,7 +162,9 @@ export default function CrearNegocio() {
 
             <input
               value={instagramUrl}
-              onChange={(e) => setInstagramUrl(e.target.value)}
+              onChange={(e) =>
+                setInstagramUrl(e.target.value)
+              }
               className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="https://instagram.com/..."
             />
@@ -143,14 +177,17 @@ export default function CrearNegocio() {
 
             <input
               value={whatsapp}
-              onChange={(e) => setWhatsapp(e.target.value)}
+              onChange={(e) =>
+                setWhatsapp(e.target.value)
+              }
               className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="Ej: +54 9 2901 64-9560"
             />
 
             <p className="mt-2 text-xs leading-5 text-neutral-600">
-              Podés ingresar solamente el número. GuestTap genera
-              automáticamente el enlace de WhatsApp.
+              Podés ingresar solamente el número.
+              GuestTap genera automáticamente el
+              enlace de WhatsApp.
             </p>
           </div>
 
@@ -161,7 +198,9 @@ export default function CrearNegocio() {
 
             <input
               value={logoUrl}
-              onChange={(e) => setLogoUrl(e.target.value)}
+              onChange={(e) =>
+                setLogoUrl(e.target.value)
+              }
               className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none placeholder:text-neutral-400 focus:border-neutral-500"
               placeholder="https://..."
             />
@@ -176,7 +215,9 @@ export default function CrearNegocio() {
             disabled={saving}
             className="w-full rounded-xl bg-neutral-900 px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {saving ? "Creando..." : "Crear negocio"}
+            {saving
+              ? "Creando..."
+              : "Crear negocio"}
           </button>
         </div>
       </div>

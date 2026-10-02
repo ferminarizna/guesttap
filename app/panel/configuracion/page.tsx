@@ -13,7 +13,8 @@ type Business = {
 };
 
 export default function ConfiguracionPage() {
-  const [business, setBusiness] = useState<Business | null>(null);
+  const [business, setBusiness] =
+    useState<Business | null>(null);
 
   const [name, setName] = useState("");
   const [googleUrl, setGoogleUrl] = useState("");
@@ -34,125 +35,157 @@ export default function ConfiguracionPage() {
     setLoading(true);
     setError("");
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      setError("No hay una sesión iniciada.");
+      if (!user) {
+        setError("No hay una sesión iniciada.");
+        setLoading(false);
+        return;
+      }
+
+      const { data: businessUser, error: businessUserError } =
+        await supabase
+          .from("business_users")
+          .select("business_id")
+          .eq("user_id", user.id)
+          .limit(1)
+          .maybeSingle();
+
+      if (businessUserError || !businessUser) {
+        console.error(businessUserError);
+        setError(
+          "No encontramos un negocio asociado a tu cuenta."
+        );
+        setLoading(false);
+        return;
+      }
+
+      const { data: businessData, error: businessError } =
+        await supabase
+          .from("businesses")
+          .select(
+            "id, name, google_url, instagram_url, whatsapp, logo_url"
+          )
+          .eq("id", businessUser.business_id)
+          .single();
+
+      if (businessError || !businessData) {
+        console.error(businessError);
+        setError(
+          "No pudimos cargar la configuración."
+        );
+        setLoading(false);
+        return;
+      }
+
+      setBusiness(businessData);
+
+      setName(businessData.name || "");
+      setGoogleUrl(businessData.google_url || "");
+      setInstagramUrl(
+        businessData.instagram_url || ""
+      );
+      setWhatsapp(businessData.whatsapp || "");
+      setLogoUrl(businessData.logo_url || "");
+
       setLoading(false);
-      return;
-    }
-
-    const { data: businessUser, error: businessUserError } =
-      await supabase
-        .from("business_users")
-        .select("business_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
-
-    if (businessUserError || !businessUser) {
-      console.error(businessUserError);
-      setError("No encontramos un negocio asociado a tu cuenta.");
+    } catch (error) {
+      console.error(error);
+      setError(
+        "Ocurrió un error al cargar la configuración."
+      );
       setLoading(false);
-      return;
     }
-
-    const { data: businessData, error: businessError } =
-      await supabase
-        .from("businesses")
-        .select(
-          "id, name, google_url, instagram_url, whatsapp, logo_url"
-        )
-        .eq("id", businessUser.business_id)
-        .single();
-
-    if (businessError || !businessData) {
-      console.error(businessError);
-      setError("No pudimos cargar la configuración.");
-      setLoading(false);
-      return;
-    }
-
-    setBusiness(businessData);
-
-    setName(businessData.name || "");
-    setGoogleUrl(businessData.google_url || "");
-    setInstagramUrl(businessData.instagram_url || "");
-    setWhatsapp(businessData.whatsapp || "");
-    setLogoUrl(businessData.logo_url || "");
-
-    setLoading(false);
   }
 
-  function convertirWhatsApp(valor: string) {
-    const texto = valor.trim();
-
-    if (!texto) {
-      return null;
-    }
-
-    if (texto.startsWith("https://wa.me/")) {
-      return texto;
-    }
-
-    if (texto.startsWith("http://wa.me/")) {
-      return texto.replace("http://", "https://");
-    }
-
-    const numero = texto.replace(/\D/g, "");
-
-    if (!numero) {
-      return null;
-    }
-
-    if (numero.startsWith("549")) {
-      return `https://wa.me/${numero}`;
-    }
-
-    if (numero.startsWith("54")) {
-      return `https://wa.me/${numero}`;
-    }
-
-    return `https://wa.me/549${numero}`;
-  }
-
-  async function guardarCambios(e: React.FormEvent) {
+  async function guardarCambios(
+    e: React.FormEvent
+  ) {
     e.preventDefault();
 
-    if (!business) return;
+    if (!business) {
+      return;
+    }
 
     setSaving(true);
     setMessage("");
     setError("");
 
     if (!name.trim()) {
-      setError("El nombre del negocio es obligatorio.");
+      setError(
+        "El nombre del negocio es obligatorio."
+      );
       setSaving(false);
       return;
     }
 
-    const { error: updateError } = await supabase
-      .from("businesses")
-      .update({
-        name: name.trim(),
-        google_url: googleUrl.trim() || null,
-        instagram_url: instagramUrl.trim() || null,
-        whatsapp: convertirWhatsApp(whatsapp),
-        logo_url: logoUrl.trim() || null,
-      })
-      .eq("id", business.id);
+    try {
+      const response = await fetch(
+        "/api/panel/configuracion",
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: name.trim(),
+            google_url: googleUrl.trim(),
+            instagram_url: instagramUrl.trim(),
+            whatsapp: whatsapp.trim(),
+            logo_url: logoUrl.trim(),
+          }),
+        }
+      );
 
-    if (updateError) {
-      console.error(updateError);
-      setError("No pudimos guardar los cambios.");
+      const result = await response.json();
+
+      if (!response.ok) {
+        console.error(
+          "Error guardando configuración:",
+          result
+        );
+
+        setError(
+          result.error ||
+            "No pudimos guardar los cambios."
+        );
+        setSaving(false);
+        return;
+      }
+
+      if (result.business) {
+        setBusiness(result.business);
+
+        setName(result.business.name || "");
+        setGoogleUrl(
+          result.business.google_url || ""
+        );
+        setInstagramUrl(
+          result.business.instagram_url || ""
+        );
+        setWhatsapp(
+          result.business.whatsapp || ""
+        );
+        setLogoUrl(
+          result.business.logo_url || ""
+        );
+      }
+
+      setMessage(
+        "Cambios guardados correctamente."
+      );
+    } catch (error) {
+      console.error(error);
+
+      setError(
+        "Ocurrió un error al guardar los cambios."
+      );
+    } finally {
       setSaving(false);
-      return;
     }
-
-    setMessage("Cambios guardados correctamente.");
-    setSaving(false);
   }
 
   if (loading) {
@@ -197,9 +230,6 @@ export default function ConfiguracionPage() {
   return (
     <main className="min-h-screen bg-[#f7f7f5] px-5 py-8">
       <div className="mx-auto max-w-3xl">
-
-        {/* HEADER */}
-
         <header className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400">
@@ -222,8 +252,6 @@ export default function ConfiguracionPage() {
             Volver al resumen
           </a>
         </header>
-
-        {/* NAVEGACIÓN */}
 
         <nav className="mt-6 flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm ring-1 ring-black/5">
           <a
@@ -255,8 +283,6 @@ export default function ConfiguracionPage() {
           </a>
         </nav>
 
-        {/* FORMULARIO */}
-
         <form
           onSubmit={guardarCambios}
           className="mt-8 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5 sm:p-8"
@@ -272,9 +298,6 @@ export default function ConfiguracionPage() {
           </div>
 
           <div className="mt-8 space-y-6">
-
-            {/* NOMBRE */}
-
             <div>
               <label className="text-sm font-medium text-neutral-800">
                 Nombre del negocio
@@ -283,13 +306,13 @@ export default function ConfiguracionPage() {
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) =>
+                  setName(e.target.value)
+                }
                 className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-black"
                 placeholder="Ej: Plantagonia"
               />
             </div>
-
-            {/* GOOGLE */}
 
             <div>
               <label className="text-sm font-medium text-neutral-800">
@@ -299,18 +322,17 @@ export default function ConfiguracionPage() {
               <input
                 type="url"
                 value={googleUrl}
-                onChange={(e) => setGoogleUrl(e.target.value)}
+                onChange={(e) =>
+                  setGoogleUrl(e.target.value)
+                }
                 className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-black"
                 placeholder="https://g.page/r/..."
               />
 
               <p className="mt-2 text-xs leading-5 text-neutral-400">
-                Es el enlace que Google genera para que tus clientes dejen
-                una reseña.
+                Es el enlace que Google genera para que tus clientes dejen una reseña.
               </p>
             </div>
-
-            {/* INSTAGRAM */}
 
             <div>
               <label className="text-sm font-medium text-neutral-800">
@@ -320,13 +342,13 @@ export default function ConfiguracionPage() {
               <input
                 type="text"
                 value={instagramUrl}
-                onChange={(e) => setInstagramUrl(e.target.value)}
+                onChange={(e) =>
+                  setInstagramUrl(e.target.value)
+                }
                 className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-black"
                 placeholder="https://instagram.com/tu-negocio"
               />
             </div>
-
-            {/* WHATSAPP */}
 
             <div>
               <label className="text-sm font-medium text-neutral-800">
@@ -336,18 +358,17 @@ export default function ConfiguracionPage() {
               <input
                 type="text"
                 value={whatsapp}
-                onChange={(e) => setWhatsapp(e.target.value)}
+                onChange={(e) =>
+                  setWhatsapp(e.target.value)
+                }
                 className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-black"
                 placeholder="Ej: 2901555555"
               />
 
               <p className="mt-2 text-xs leading-5 text-neutral-400">
-                Podés ingresar solamente el número. GuestTap lo convierte
-                automáticamente en un enlace de WhatsApp.
+                Podés ingresar solamente el número. GuestTap lo convierte automáticamente en un enlace de WhatsApp.
               </p>
             </div>
-
-            {/* LOGO */}
 
             <div>
               <label className="text-sm font-medium text-neutral-800">
@@ -357,7 +378,9 @@ export default function ConfiguracionPage() {
               <input
                 type="url"
                 value={logoUrl}
-                onChange={(e) => setLogoUrl(e.target.value)}
+                onChange={(e) =>
+                  setLogoUrl(e.target.value)
+                }
                 className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3.5 text-sm outline-none transition focus:border-black"
                 placeholder="https://..."
               />
@@ -367,8 +390,6 @@ export default function ConfiguracionPage() {
               </p>
             </div>
           </div>
-
-          {/* MENSAJES */}
 
           {error && (
             <div className="mt-6 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -382,14 +403,14 @@ export default function ConfiguracionPage() {
             </div>
           )}
 
-          {/* BOTÓN */}
-
           <button
             type="submit"
             disabled={saving}
             className="mt-8 w-full rounded-2xl bg-black px-5 py-4 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {saving ? "Guardando..." : "Guardar cambios"}
+            {saving
+              ? "Guardando..."
+              : "Guardar cambios"}
           </button>
         </form>
       </div>
