@@ -28,15 +28,16 @@ export default function ClientesPage() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [associations, setAssociations] = useState<Association[]>([]);
 
-  const [selectedUser, setSelectedUser] = useState("");
+  const [email, setEmail] = useState("");
   const [selectedBusiness, setSelectedBusiness] = useState("");
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [activationLink, setActivationLink] = useState("");
 
   async function obtenerSesion() {
     const {
@@ -89,34 +90,40 @@ export default function ClientesPage() {
     cargarDatos();
   }, []);
 
-  async function asociarCliente() {
+  async function crearCliente() {
     setMessage("");
     setError("");
+    setActivationLink("");
 
-    if (!selectedUser || !selectedBusiness) {
-      setError("Seleccioná un cliente y un negocio.");
+    if (!email.trim()) {
+      setError("Ingresá el email del cliente.");
       return;
     }
 
-    setSaving(true);
+    if (!selectedBusiness) {
+      setError("Seleccioná el negocio.");
+      return;
+    }
+
+    setCreating(true);
 
     try {
       const session = await obtenerSesion();
 
       if (!session) {
         setError("La sesión expiró. Volvé a iniciar sesión.");
-        setSaving(false);
+        setCreating(false);
         return;
       }
 
-      const response = await fetch("/api/admin/business-users", {
+      const response = await fetch("/api/admin/clientes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
-          user_id: selectedUser,
+          email: email.trim(),
           business_id: Number(selectedBusiness),
         }),
       });
@@ -124,32 +131,29 @@ export default function ClientesPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        setError(result.error || "No se pudo asociar el cliente.");
-        setSaving(false);
+        setError(result.error || "No se pudo crear el cliente.");
+        setCreating(false);
         return;
       }
 
-      const usuario = users.find((user) => user.id === selectedUser);
-      const negocio = businesses.find(
-        (business) => business.id === Number(selectedBusiness)
-      );
-
       setMessage(
-        `${usuario?.email || "Cliente"} quedó asociado a ${
-          negocio?.name || "el negocio"
-        }.`
+        `${result.email} fue asociado correctamente a ${result.business}.`
       );
 
-      setSelectedUser("");
+      if (result.activationLink) {
+        setActivationLink(result.activationLink);
+      }
+
+      setEmail("");
       setSelectedBusiness("");
 
       await cargarDatos();
     } catch (error) {
       console.error(error);
-      setError("Ocurrió un error al asociar el cliente.");
+      setError("Ocurrió un error al crear el cliente.");
     }
 
-    setSaving(false);
+    setCreating(false);
   }
 
   async function desasociarCliente(association: Association) {
@@ -173,6 +177,7 @@ export default function ClientesPage() {
 
     setMessage("");
     setError("");
+    setActivationLink("");
     setDeletingId(association.id);
 
     try {
@@ -208,7 +213,7 @@ export default function ClientesPage() {
 
       setMessage(
         `${usuario?.email || "Cliente"} fue desasociado de ${
-          negocio?.name || "el negocio"
+          negocio?.name || "este negocio"
         }.`
       );
 
@@ -263,52 +268,39 @@ export default function ClientesPage() {
           </h1>
 
           <p className="mt-2 text-sm text-neutral-500">
-            Administrá qué negocio puede gestionar cada cuenta.
+            Creá cuentas y asignales el negocio que van a administrar.
           </p>
         </header>
 
         {loading ? (
           <div className="mt-8 rounded-3xl border border-neutral-200 bg-white p-10 text-center text-sm text-neutral-500 shadow-sm">
-            Cargando clientes y negocios...
+            Cargando...
           </div>
         ) : (
           <>
             <section className="mt-8 rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm">
               <h2 className="text-lg font-semibold">
-                Asociar cliente
+                Crear cliente
               </h2>
 
               <p className="mt-1 text-sm text-neutral-500">
-                El cliente podrá ver y administrar el negocio que le
-                asignes.
+                La cuenta quedará vinculada automáticamente al negocio
+                seleccionado.
               </p>
 
               <div className="mt-6 grid gap-5 md:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-sm font-medium">
-                    Cliente
+                    Email del cliente
                   </label>
 
-                  <select
-                    value={selectedUser}
-                    onChange={(e) => setSelectedUser(e.target.value)}
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="cliente@gmail.com"
                     className="w-full rounded-xl border border-neutral-200 bg-white p-4 outline-none focus:ring-2 focus:ring-black"
-                  >
-                    <option value="">
-                      Seleccionar cliente...
-                    </option>
-
-                    {users
-                      .filter(
-                        (user) =>
-                          user.email !== "ariznafermin@gmail.com"
-                      )
-                      .map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.email || user.id}
-                        </option>
-                      ))}
-                  </select>
+                  />
                 </div>
 
                 <div>
@@ -351,18 +343,43 @@ export default function ClientesPage() {
                 </div>
               )}
 
+              {activationLink && (
+                <div className="mt-5 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                  <p className="text-sm font-semibold">
+                    Enlace de activación
+                  </p>
+
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Copiá este enlace y enviáselo al cliente.
+                  </p>
+
+                  <input
+                    readOnly
+                    value={activationLink}
+                    className="mt-3 w-full rounded-xl border border-neutral-200 bg-white p-3 text-xs text-neutral-700"
+                  />
+
+                  <button
+                    onClick={() =>
+                      navigator.clipboard.writeText(activationLink)
+                    }
+                    className="mt-3 rounded-xl bg-black px-4 py-2 text-sm font-semibold text-white hover:bg-neutral-800"
+                  >
+                    Copiar enlace
+                  </button>
+                </div>
+              )}
+
               <button
-                onClick={asociarCliente}
+                onClick={crearCliente}
                 disabled={
-                  !selectedUser ||
+                  !email.trim() ||
                   !selectedBusiness ||
-                  saving
+                  creating
                 }
                 className="mt-6 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {saving
-                  ? "Asociando..."
-                  : "Asociar cliente"}
+                {creating ? "Creando..." : "Crear cliente"}
               </button>
             </section>
 
@@ -373,8 +390,7 @@ export default function ClientesPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-neutral-500">
-                  Estas son las cuentas que actualmente tienen
-                  acceso a un negocio.
+                  Cuentas que actualmente tienen acceso a un negocio.
                 </p>
               </div>
 
