@@ -89,12 +89,15 @@ function calcularStats(feedback: Feedback[]): BusinessStats {
     if (fecha >= hace30Dias) {
       stats.last30 += 1;
 
-      const diferencia =
-        Math.floor(
-          (ahora.getTime() - fecha.getTime()) / (1000 * 60 * 60 * 24)
-        );
+      const diferencia = Math.floor(
+        (ahora.getTime() - fecha.getTime()) /
+          (1000 * 60 * 60 * 24)
+      );
 
-      const indice = Math.min(29, Math.max(0, 29 - diferencia));
+      const indice = Math.min(
+        29,
+        Math.max(0, 29 - diferencia)
+      );
 
       stats.daily[indice] += 1;
     } else if (fecha >= hace60Dias && fecha < hace30Dias) {
@@ -127,9 +130,14 @@ function MiniChart({ values }: { values: number[] }) {
           key={index}
           className="flex-1 rounded-t-md bg-neutral-900 transition-all"
           style={{
-            height: `${Math.max(8, (value / max) * 100)}%`,
+            height: `${Math.max(
+              8,
+              (value / max) * 100
+            )}%`,
           }}
-          title={`${value} valoración${value === 1 ? "" : "es"}`}
+          title={`${value} valoración${
+            value === 1 ? "" : "es"
+          }`}
         />
       ))}
     </div>
@@ -140,48 +148,70 @@ export default function AdminPage() {
   const router = useRouter();
 
   const [businesses, setBusinesses] = useState<Business[]>([]);
-  const [stats, setStats] = useState<Record<number, BusinessStats>>({});
+  const [stats, setStats] = useState<
+    Record<number, BusinessStats>
+  >({});
   const [loading, setLoading] = useState(true);
 
   async function cargarDashboard() {
     setLoading(true);
 
-    const { data: businessesData, error: businessesError } =
-      await supabase
-        .from("businesses")
-        .select("id, name, slug, google_url, instagram_url, whatsapp")
-        .order("id", { ascending: true });
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    if (businessesError) {
-      console.error(businessesError);
-      setLoading(false);
-      return;
-    }
+      if (!session?.access_token) {
+        console.error("No hay sesión de administrador.");
+        setLoading(false);
+        router.replace("/admin-login");
+        return;
+      }
 
-    const { data: feedbackData, error: feedbackError } = await supabase
-      .from("feedback")
-      .select("id, created_at, message, rating, business_id")
-      .order("created_at", { ascending: false });
+      const response = await fetch("/api/admin/dashboard", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
 
-    if (feedbackError) {
-      console.error(feedbackError);
-      setLoading(false);
-      return;
-    }
+      const result = await response.json();
 
-    const nuevosStats: Record<number, BusinessStats> = {};
+      if (!response.ok) {
+        console.error(
+          "Error cargando dashboard:",
+          result
+        );
+        setLoading(false);
+        return;
+      }
 
-    (businessesData || []).forEach((business) => {
-      const feedbackNegocio = (feedbackData || []).filter(
-        (item) => Number(item.business_id) === Number(business.id)
+      const businessesData = result.businesses || [];
+      const feedbackData = result.feedback || [];
+
+      const nuevosStats: Record<number, BusinessStats> = {};
+
+      businessesData.forEach((business: Business) => {
+        const feedbackNegocio = feedbackData.filter(
+          (item: Feedback) =>
+            Number(item.business_id) ===
+            Number(business.id)
+        );
+
+        nuevosStats[business.id] =
+          calcularStats(feedbackNegocio);
+      });
+
+      setBusinesses(businessesData);
+      setStats(nuevosStats);
+    } catch (error) {
+      console.error(
+        "Error cargando dashboard:",
+        error
       );
-
-      nuevosStats[business.id] = calcularStats(feedbackNegocio);
-    });
-
-    setBusinesses(businessesData || []);
-    setStats(nuevosStats);
-    setLoading(false);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -196,7 +226,10 @@ export default function AdminPage() {
   const resumen = useMemo(() => {
     const valores = Object.values(stats);
 
-    const total = valores.reduce((sum, item) => sum + item.total, 0);
+    const total = valores.reduce(
+      (sum, item) => sum + item.total,
+      0
+    );
 
     const totalFeedback = valores.reduce(
       (sum, item) => sum + item.privateFeedback,
@@ -214,15 +247,19 @@ export default function AdminPage() {
     );
 
     const sumaPromedios = valores.reduce(
-      (sum, item) => sum + item.average * item.total,
+      (sum, item) =>
+        sum + item.average * item.total,
       0
     );
 
-    const promedio = total > 0 ? sumaPromedios / total : 0;
+    const promedio =
+      total > 0 ? sumaPromedios / total : 0;
 
     const positivas = valores.reduce(
       (sum, item) =>
-        sum + item.distribution[5] + item.distribution[4],
+        sum +
+        item.distribution[5] +
+        item.distribution[4],
       0
     );
 
@@ -232,7 +269,10 @@ export default function AdminPage() {
       ultimos30,
       anteriores30,
       promedio,
-      porcentajePositivo: total > 0 ? (positivas / total) * 100 : 0,
+      porcentajePositivo:
+        total > 0
+          ? (positivas / total) * 100
+          : 0,
     };
   }, [stats]);
 
@@ -243,14 +283,16 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-[#f7f7f5] text-neutral-950">
-<div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10">
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8 xl:px-10">
         {/* HEADER */}
+
         <header className="flex flex-col gap-6 border-b border-neutral-200 pb-7 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-3 flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-black text-sm font-bold text-white">
                 G
               </div>
+
               <span className="text-sm font-semibold tracking-tight">
                 GuestTap
               </span>
@@ -302,6 +344,7 @@ export default function AdminPage() {
         ) : (
           <>
             {/* RESUMEN GENERAL */}
+
             <section className="mt-8">
               <div className="mb-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
@@ -314,9 +357,11 @@ export default function AdminPage() {
                   <p className="text-sm text-neutral-500">
                     Valoraciones totales
                   </p>
+
                   <p className="mt-3 text-3xl font-semibold tracking-tight">
                     {resumen.total}
                   </p>
+
                   <p className="mt-1 text-xs text-neutral-400">
                     Todos tus negocios
                   </p>
@@ -357,7 +402,11 @@ export default function AdminPage() {
 
                   <p className="mt-1 text-xs text-neutral-400">
                     {cambioGeneral !== null
-                      ? `${cambioGeneral >= 0 ? "+" : ""}${cambioGeneral.toFixed(
+                      ? `${
+                          cambioGeneral >= 0
+                            ? "+"
+                            : ""
+                        }${cambioGeneral.toFixed(
                           0
                         )}% vs. período anterior`
                       : "Sin período anterior"}
@@ -370,7 +419,10 @@ export default function AdminPage() {
                   </p>
 
                   <p className="mt-3 text-3xl font-semibold tracking-tight">
-                    {Math.round(resumen.porcentajePositivo)}%
+                    {Math.round(
+                      resumen.porcentajePositivo
+                    )}
+                    %
                   </p>
 
                   <p className="mt-1 text-xs text-neutral-400">
@@ -381,12 +433,14 @@ export default function AdminPage() {
             </section>
 
             {/* NEGOCIOS */}
+
             <section className="mt-10">
               <div className="mb-4 flex items-end justify-between">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
                     Negocios
                   </p>
+
                   <h2 className="mt-1 text-xl font-semibold tracking-tight">
                     Rendimiento por negocio
                   </h2>
@@ -394,21 +448,25 @@ export default function AdminPage() {
 
                 <span className="text-sm text-neutral-400">
                   {businesses.length} negocio
-                  {businesses.length === 1 ? "" : "s"}
+                  {businesses.length === 1
+                    ? ""
+                    : "s"}
                 </span>
               </div>
 
               <div className="space-y-5">
                 {businesses.map((business) => {
                   const businessStats =
-                    stats[business.id] || crearStats();
+                    stats[business.id] ||
+                    crearStats();
 
                   const cambio = calcularCambio(
                     businessStats.last30,
                     businessStats.previous30
                   );
 
-                  const total = businessStats.total || 1;
+                  const total =
+                    businessStats.total || 1;
 
                   const positivas =
                     businessStats.distribution[5] +
@@ -423,6 +481,7 @@ export default function AdminPage() {
                       className="overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-sm"
                     >
                       {/* BUSINESS HEADER */}
+
                       <div className="flex flex-col gap-5 border-b border-neutral-100 p-6 lg:flex-row lg:items-center lg:justify-between">
                         <div>
                           <div className="flex items-center gap-3">
@@ -478,6 +537,7 @@ export default function AdminPage() {
                       </div>
 
                       {/* KEY METRICS */}
+
                       <div className="grid border-b border-neutral-100 sm:grid-cols-2 lg:grid-cols-4">
                         <div className="p-6 lg:border-r lg:border-neutral-100">
                           <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
@@ -486,12 +546,16 @@ export default function AdminPage() {
 
                           <div className="mt-2 flex items-baseline gap-2">
                             <span className="text-3xl font-semibold tracking-tight">
-                              {businessStats.total > 0
-                                ? businessStats.average.toFixed(1)
+                              {businessStats.total >
+                              0
+                                ? businessStats.average.toFixed(
+                                    1
+                                  )
                                 : "—"}
                             </span>
 
-                            {businessStats.total > 0 && (
+                            {businessStats.total >
+                              0 && (
                               <span className="text-sm text-neutral-400">
                                 / 5
                               </span>
@@ -514,7 +578,11 @@ export default function AdminPage() {
 
                           <p className="mt-1 text-xs text-neutral-400">
                             {cambio !== null
-                              ? `${cambio >= 0 ? "+" : ""}${cambio.toFixed(
+                              ? `${
+                                  cambio >= 0
+                                    ? "+"
+                                    : ""
+                                }${cambio.toFixed(
                                   0
                                 )}% vs. período anterior`
                               : "Sin período anterior"}
@@ -527,7 +595,9 @@ export default function AdminPage() {
                           </p>
 
                           <p className="mt-2 text-3xl font-semibold tracking-tight">
-                            {businessStats.privateFeedback}
+                            {
+                              businessStats.privateFeedback
+                            }
                           </p>
 
                           <p className="mt-1 text-xs text-neutral-400">
@@ -541,7 +611,10 @@ export default function AdminPage() {
                           </p>
 
                           <p className="mt-2 text-3xl font-semibold tracking-tight">
-                            {Math.round(porcentajePositivo)}%
+                            {Math.round(
+                              porcentajePositivo
+                            )}
+                            %
                           </p>
 
                           <p className="mt-1 text-xs text-neutral-400">
@@ -551,14 +624,17 @@ export default function AdminPage() {
                       </div>
 
                       {/* LOWER CONTENT */}
+
                       <div className="grid gap-8 p-6 lg:grid-cols-2">
                         {/* DISTRIBUCIÓN */}
+
                         <div>
                           <div className="flex items-end justify-between">
                             <div>
                               <h4 className="text-sm font-semibold">
                                 Distribución
                               </h4>
+
                               <p className="mt-1 text-xs text-neutral-400">
                                 Todas las valoraciones recibidas
                               </p>
@@ -566,57 +642,66 @@ export default function AdminPage() {
                           </div>
 
                           <div className="mt-5 space-y-3">
-                            {[5, 4, 3, 2, 1].map((rating) => {
-                              const cantidad =
-                                businessStats.distribution[
-                                  rating as keyof typeof businessStats.distribution
-                                ];
+                            {[5, 4, 3, 2, 1].map(
+                              (rating) => {
+                                const cantidad =
+                                  businessStats
+                                    .distribution[
+                                    rating as keyof typeof businessStats.distribution
+                                  ];
 
-                              const porcentaje =
-                                businessStats.total > 0
-                                  ? (cantidad /
-                                      businessStats.total) *
-                                    100
-                                  : 0;
+                                const porcentaje =
+                                  businessStats.total >
+                                  0
+                                    ? (cantidad /
+                                        businessStats.total) *
+                                      100
+                                    : 0;
 
-                              return (
-                                <div
-                                  key={rating}
-                                  className="flex items-center gap-3"
-                                >
-                                  <span className="w-10 text-xs font-medium text-neutral-600">
-                                    {rating} ⭐
-                                  </span>
+                                return (
+                                  <div
+                                    key={rating}
+                                    className="flex items-center gap-3"
+                                  >
+                                    <span className="w-10 text-xs font-medium text-neutral-600">
+                                      {rating} ⭐
+                                    </span>
 
-                                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-100">
-                                    <div
-                                      className="h-full rounded-full bg-neutral-900 transition-all"
-                                      style={{
-                                        width: `${porcentaje}%`,
-                                      }}
-                                    />
+                                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-100">
+                                      <div
+                                        className="h-full rounded-full bg-neutral-900 transition-all"
+                                        style={{
+                                          width: `${porcentaje}%`,
+                                        }}
+                                      />
+                                    </div>
+
+                                    <span className="w-8 text-right text-xs font-medium text-neutral-500">
+                                      {cantidad}
+                                    </span>
+
+                                    <span className="w-10 text-right text-xs text-neutral-400">
+                                      {Math.round(
+                                        porcentaje
+                                      )}
+                                      %
+                                    </span>
                                   </div>
-
-                                  <span className="w-8 text-right text-xs font-medium text-neutral-500">
-                                    {cantidad}
-                                  </span>
-
-                                  <span className="w-10 text-right text-xs text-neutral-400">
-                                    {Math.round(porcentaje)}%
-                                  </span>
-                                </div>
-                              );
-                            })}
+                                );
+                              }
+                            )}
                           </div>
                         </div>
 
                         {/* ACTIVIDAD */}
+
                         <div>
                           <div className="flex items-end justify-between">
                             <div>
                               <h4 className="text-sm font-semibold">
                                 Actividad
                               </h4>
+
                               <p className="mt-1 text-xs text-neutral-400">
                                 Valoraciones de los últimos 30 días
                               </p>
@@ -629,11 +714,16 @@ export default function AdminPage() {
 
                           <div className="mt-5 rounded-2xl bg-neutral-50 p-4">
                             <MiniChart
-                              values={businessStats.daily}
+                              values={
+                                businessStats.daily
+                              }
                             />
 
                             <div className="mt-3 flex justify-between text-[10px] text-neutral-400">
-                              <span>30 días atrás</span>
+                              <span>
+                                30 días atrás
+                              </span>
+
                               <span>Hoy</span>
                             </div>
                           </div>
@@ -646,6 +736,7 @@ export default function AdminPage() {
             </section>
 
             {/* FOOTER INFO */}
+
             <div className="mt-8 border-t border-neutral-200 pt-6 text-center text-xs text-neutral-400">
               GuestTap · Dashboard de experiencia
             </div>

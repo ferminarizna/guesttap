@@ -4,8 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-const ADMIN_EMAIL = "ariznafermin@gmail.com";
-
 export default function AdminLoginPage() {
   const router = useRouter();
 
@@ -15,29 +13,58 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
 
   async function iniciarSesion() {
+    if (loading) {
+      return;
+    }
+
     setError("");
     setLoading(true);
 
-    const normalizedEmail = email.trim().toLowerCase();
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
 
-    if (normalizedEmail !== ADMIN_EMAIL) {
-      setError("Esta cuenta no tiene acceso al panel de administración.");
+      const { data, error: signInError } =
+        await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
+        });
+
+      if (signInError) {
+        console.error(
+          "Error iniciando sesión:",
+          signInError
+        );
+
+        setError("Email o contraseña incorrectos.");
+        setLoading(false);
+        return;
+      }
+
+      if (!data.session || !data.user) {
+        setError(
+          "No se pudo iniciar la sesión. Intentá nuevamente."
+        );
+        setLoading(false);
+        return;
+      }
+
+      /*
+       * La autorización de administrador se realiza
+       * en el servidor mediante proxy.ts.
+       */
+      window.location.href = "/admin";
+    } catch (error) {
+      console.error(
+        "Error inesperado iniciando sesión:",
+        error
+      );
+
+      setError(
+        "Ocurrió un error al iniciar sesión. Intentá nuevamente."
+      );
+
       setLoading(false);
-      return;
     }
-
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: normalizedEmail,
-      password,
-    });
-
-    if (signInError) {
-      setError("Email o contraseña incorrectos.");
-      setLoading(false);
-      return;
-    }
-
-    router.replace("/admin");
   }
 
   return (
@@ -82,7 +109,12 @@ export default function AdminLoginPage() {
               autoComplete="current-password"
               className="w-full rounded-xl border border-neutral-200 bg-white p-4 outline-none focus:ring-2 focus:ring-black"
               onKeyDown={(e) => {
-                if (e.key === "Enter" && email && password && !loading) {
+                if (
+                  e.key === "Enter" &&
+                  email &&
+                  password &&
+                  !loading
+                ) {
                   iniciarSesion();
                 }
               }}
