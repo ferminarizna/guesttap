@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { verificarAdministrador } from "../../../../lib/admin-auth";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -7,17 +8,6 @@ const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("Faltan variables de entorno de Supabase.");
 }
-
-const supabaseAuth = createClient(
-  supabaseUrl,
-  serviceRoleKey,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
 
 const supabaseAdmin = createClient(
   supabaseUrl,
@@ -29,76 +19,6 @@ const supabaseAdmin = createClient(
     },
   }
 );
-
-const ADMIN_EMAIL = "ariznafermin@gmail.com";
-
-async function verificarAdministrador(request: NextRequest) {
-  const authorization = request.headers.get("authorization");
-
-  if (!authorization?.startsWith("Bearer ")) {
-    return {
-      user: null,
-      response: NextResponse.json(
-        { error: "No autorizado." },
-        { status: 401 }
-      ),
-    };
-  }
-
-  const accessToken = authorization
-    .replace("Bearer ", "")
-    .trim();
-
-  if (!accessToken) {
-    return {
-      user: null,
-      response: NextResponse.json(
-        { error: "No autorizado." },
-        { status: 401 }
-      ),
-    };
-  }
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabaseAuth.auth.getUser(accessToken);
-
-  if (userError || !user) {
-    console.error("Error verificando sesión:", userError);
-
-    return {
-      user: null,
-      response: NextResponse.json(
-        { error: "Sesión inválida." },
-        { status: 401 }
-      ),
-    };
-  }
-
-  const userEmail = user.email?.trim().toLowerCase();
-
-  if (userEmail !== ADMIN_EMAIL) {
-    console.error(
-      `Acceso administrativo rechazado para: ${
-        userEmail || "sin email"
-      }`
-    );
-
-    return {
-      user: null,
-      response: NextResponse.json(
-        { error: "No tenés permisos de administrador." },
-        { status: 403 }
-      ),
-    };
-  }
-
-  return {
-    user,
-    response: null,
-  };
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -115,7 +35,10 @@ export async function GET(request: NextRequest) {
       });
 
     if (usersError) {
-      console.error("Error obteniendo usuarios:", usersError);
+      console.error(
+        "Error obteniendo usuarios:",
+        usersError
+      );
 
       return NextResponse.json(
         { error: "No se pudieron obtener los usuarios." },
@@ -172,7 +95,10 @@ export async function GET(request: NextRequest) {
       associations: associations || [],
     });
   } catch (error) {
-    console.error("Error en GET business-users:", error);
+    console.error(
+      "Error en GET /api/admin/business-users:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Error interno del servidor." },
@@ -191,13 +117,21 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    const userId = body?.user_id;
-    const businessId = body?.business_id;
+    const userId =
+      typeof body?.user_id === "string"
+        ? body.user_id.trim()
+        : "";
 
-    if (!userId || !businessId) {
+    const businessId =
+      typeof body?.business_id === "number"
+        ? body.business_id
+        : Number(body?.business_id);
+
+    if (!userId || !Number.isInteger(businessId)) {
       return NextResponse.json(
         {
-          error: "user_id y business_id son obligatorios.",
+          error:
+            "user_id y business_id son obligatorios y válidos.",
         },
         { status: 400 }
       );
@@ -289,7 +223,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     console.error(
-      "Error en POST business-users:",
+      "Error en POST /api/admin/business-users:",
       error
     );
 
@@ -310,13 +244,21 @@ export async function DELETE(request: NextRequest) {
 
     const body = await request.json();
 
-    const userId = body?.user_id;
-    const businessId = body?.business_id;
+    const userId =
+      typeof body?.user_id === "string"
+        ? body.user_id.trim()
+        : "";
 
-    if (!userId || !businessId) {
+    const businessId =
+      typeof body?.business_id === "number"
+        ? body.business_id
+        : Number(body?.business_id);
+
+    if (!userId || !Number.isInteger(businessId)) {
       return NextResponse.json(
         {
-          error: "user_id y business_id son obligatorios.",
+          error:
+            "user_id y business_id son obligatorios y válidos.",
         },
         { status: 400 }
       );
@@ -345,7 +287,7 @@ export async function DELETE(request: NextRequest) {
     });
   } catch (error) {
     console.error(
-      "Error en DELETE business-users:",
+      "Error en DELETE /api/admin/business-users:",
       error
     );
 

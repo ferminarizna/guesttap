@@ -1,41 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { verificarAdministrador } from "../../../../lib/admin-auth";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabaseKey || !serviceRoleKey) {
+const ACTIVATION_REDIRECT_URL =
+  "https://guesttap-five.vercel.app/activar-cuenta";
+
+if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("Faltan variables de entorno de Supabase.");
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
-const admin = createClient(supabaseUrl, serviceRoleKey);
-
-async function verificarAdmin(request: NextRequest) {
-  const auth = request.headers.get("authorization");
-
-  if (!auth?.startsWith("Bearer ")) {
-    return false;
+const supabaseAdmin = createClient(
+  supabaseUrl,
+  serviceRoleKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
   }
-
-  const token = auth.replace("Bearer ", "");
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser(token);
-
-  return !error && user?.email === "ariznafermin@gmail.com";
-}
+);
 
 export async function POST(request: NextRequest) {
   try {
-    if (!(await verificarAdmin(request))) {
-      return NextResponse.json(
-        { error: "No autorizado." },
-        { status: 403 }
-      );
+    const auth = await verificarAdministrador(request);
+
+    if (auth.response) {
+      return auth.response;
     }
 
     const body = await request.json();
@@ -45,27 +38,50 @@ export async function POST(request: NextRequest) {
         ? body.email.trim().toLowerCase()
         : "";
 
-    const businessId = Number(body.business_id);
+    const businessId =
+      typeof body.business_id === "number"
+        ? body.business_id
+        : Number(body.business_id);
 
-    if (!email || !email.includes("@")) {
+    if (
+      !email ||
+      !email.includes("@") ||
+      email.length > 254
+    ) {
       return NextResponse.json(
         { error: "Ingresá un email válido." },
         { status: 400 }
       );
     }
 
-    if (!businessId) {
+    if (
+      !Number.isInteger(businessId) ||
+      businessId <= 0
+    ) {
       return NextResponse.json(
-        { error: "Seleccioná un negocio." },
+        { error: "Seleccioná un negocio válido." },
         { status: 400 }
       );
     }
 
-    const { data: business } = await admin
-      .from("businesses")
-      .select("id, name")
-      .eq("id", businessId)
-      .maybeSingle();
+    const { data: business, error: businessError } =
+      await supabaseAdmin
+        .from("businesses")
+        .select("id, name")
+        .eq("id", businessId)
+        .maybeSingle();
+
+    if (businessError) {
+      console.error(
+        "Error verificando negocio:",
+        businessError
+      );
+
+      return NextResponse.json(
+        { error: "No se pudo verificar el negocio." },
+        { status: 500 }
+      );
+    }
 
     if (!business) {
       return NextResponse.json(
@@ -74,45 +90,71 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: users } = await admin.auth.admin.listUsers({
-      page: 1,
-      perPage: 100,
-    });
+    const { data: usersData, error: usersError } =
+      await supabaseAdmin.auth.admin.listUsers({
+        page: 1,
+        perPage: 100,
+      });
 
-    let user = users?.users.find(
-      (u) => u.email?.toLowerCase() === email
+    if (usersError) {
+      console.error(
+        "Error obteniendo usuarios:",
+        usersError
+      );
+
+      return NextResponse.json(
+        { error: "No se pudo verificar el usuario." },
+        { status: 500 }
+      );
+    }
+
+    let user = usersData.users.find(
+      (existingUser) =>
+        existingUser.email?.trim().toLowerCase() === email
     );
 
     if (!user) {
-      const result = await admin.auth.admin.createUser({
+      const {
+        data: createdUser,
+        error: createUserError,
+      } = await supabaseAdmin.auth.admin.createUser({
         email,
         email_confirm: false,
       });
 
-      if (result.error || !result.data.user) {
+      if (createUserError || !createdUser.user) {
+        console.error(
+          "Error creando usuario:",
+          createUserError
+        );
+
         return NextResponse.json(
           { error: "No se pudo crear el cliente." },
           { status: 500 }
         );
       }
 
-      user = result.data.user;
+      user = createdUser.user;
     }
 
-    const { error: associationError } = await admin
-      .from("business_users")
-      .upsert(
-        {
-          user_id: user.id,
-          business_id: businessId,
-        },
-        {
-          onConflict: "user_id,business_id",
-        }
-      );
+    const { error: associationError } =
+      await supabaseAdmin
+        .from("business_users")
+        .upsert(
+          {
+            user_id: user.id,
+            business_id: businessId,
+          },
+          {
+            onConflict: "user_id,business_id",
+          }
+        );
 
     if (associationError) {
-      console.error(associationError);
+      console.error(
+        "Error creando asociación:",
+        associationError
+      );
 
       return NextResponse.json(
         { error: "No se pudo asociar el cliente." },
@@ -120,18 +162,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: link, error: linkError } =
-      await admin.auth.admin.generateLink({
-        type: "invite",
-        email,
-        options: {
-          redirectTo:
-            "https://guesttap-five.vercel.app/activar-cuenta",
-        },
-      });
+    const {
+      data: link,
+      error: linkError,
+    } = await supabaseAdmin.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: {
+        redirectTo: ACTIVATION_REDIRECT_URL,
+      },
+    });
 
     if (linkError) {
-      console.error(linkError);
+      console.error(
+        "Error generando enlace de activación:",
+        linkError
+      );
+
+      return NextResponse.json({
+        success: true,
+        email,
+        business: business.name,
+        activationLink: null,
+        warning:
+          "El cliente fue creado/asociado, pero no se pudo generar el enlace de activación.",
+      });
     }
 
     return NextResponse.json({
@@ -142,7 +197,10 @@ export async function POST(request: NextRequest) {
         link?.properties?.action_link || null,
     });
   } catch (error) {
-    console.error(error);
+    console.error(
+      "Error en POST /api/admin/clientes:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Error interno del servidor." },
