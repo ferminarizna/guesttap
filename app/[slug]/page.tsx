@@ -119,20 +119,19 @@ export default function BusinessPage({
     async function cargarNegocio() {
       const { slug } = await params;
 
-      const { data, error } = await supabase
-        .from("businesses")
-        .select(
-          "id, name, slug, google_url, instagram_url, whatsapp, logo_url"
-        )
-        .eq("slug", slug)
-        .single();
+      const { data, error } = await supabase.rpc(
+        "get_public_business_by_slug",
+        {
+          requested_slug: slug,
+        }
+      );
 
-      if (error || !data) {
+      if (error || !data || data.length === 0) {
         router.push("/_not-found");
         return;
       }
 
-      setBusiness(data);
+      setBusiness(data[0]);
       setLanguage(detectarIdioma());
       setLoading(false);
     }
@@ -231,7 +230,6 @@ export default function BusinessPage({
   return (
     <main className="min-h-screen bg-[#f7f7f5] text-neutral-900">
       <section className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 py-6">
-
         {/* IDIOMA */}
         <div className="flex justify-end">
           <div className="inline-flex rounded-full border border-neutral-200 bg-white p-1 shadow-sm">
@@ -296,6 +294,7 @@ export default function BusinessPage({
                   <span className="block text-sm font-semibold">
                     {t.excellent}
                   </span>
+
                   <span className="mt-0.5 block text-xs text-neutral-400">
                     ⭐⭐⭐⭐⭐
                   </span>
@@ -318,6 +317,7 @@ export default function BusinessPage({
                   <span className="block text-sm font-semibold">
                     {t.veryGood}
                   </span>
+
                   <span className="mt-0.5 block text-xs text-neutral-400">
                     ⭐⭐⭐⭐
                   </span>
@@ -340,6 +340,7 @@ export default function BusinessPage({
                   <span className="block text-sm font-semibold">
                     {t.good}
                   </span>
+
                   <span className="mt-0.5 block text-xs text-neutral-400">
                     ⭐⭐⭐
                   </span>
@@ -362,6 +363,7 @@ export default function BusinessPage({
                   <span className="block text-sm font-semibold">
                     {t.improve}
                   </span>
+
                   <span className="mt-0.5 block text-xs text-neutral-400">
                     ⭐⭐
                   </span>
