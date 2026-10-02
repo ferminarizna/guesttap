@@ -32,6 +32,8 @@ const supabaseAdmin = createClient(
   }
 );
 
+const ADMIN_EMAIL = "ariznafermin@gmail.com";
+
 async function verificarAdministrador(request: NextRequest) {
   const authorization = request.headers.get("authorization");
 
@@ -45,7 +47,9 @@ async function verificarAdministrador(request: NextRequest) {
     };
   }
 
-  const accessToken = authorization.replace("Bearer ", "").trim();
+  const accessToken = authorization
+    .replace("Bearer ", "")
+    .trim();
 
   if (!accessToken) {
     return {
@@ -63,6 +67,8 @@ async function verificarAdministrador(request: NextRequest) {
   } = await supabaseAuth.auth.getUser(accessToken);
 
   if (userError || !user) {
+    console.error("Error verificando sesión:", userError);
+
     return {
       user: null,
       response: NextResponse.json(
@@ -72,7 +78,13 @@ async function verificarAdministrador(request: NextRequest) {
     };
   }
 
-  if (user.email !== "ariznafermin@gmail.com") {
+  const userEmail = user.email?.trim().toLowerCase();
+
+  if (userEmail !== ADMIN_EMAIL) {
+    console.error(
+      `Acceso administrativo rechazado para: ${userEmail || "sin email"}`
+    );
+
     return {
       user: null,
       response: NextResponse.json(
