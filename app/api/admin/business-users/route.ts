@@ -2,17 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabasePublishableKey =
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!supabaseUrl || !supabasePublishableKey || !serviceRoleKey) {
+if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("Faltan variables de entorno de Supabase.");
 }
 
 const supabaseAuth = createClient(
   supabaseUrl,
-  supabasePublishableKey,
+  serviceRoleKey,
   {
     auth: {
       autoRefreshToken: false,
@@ -82,7 +80,9 @@ async function verificarAdministrador(request: NextRequest) {
 
   if (userEmail !== ADMIN_EMAIL) {
     console.error(
-      `Acceso administrativo rechazado para: ${userEmail || "sin email"}`
+      `Acceso administrativo rechazado para: ${
+        userEmail || "sin email"
+      }`
     );
 
     return {
@@ -221,7 +221,10 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
     if (businessError) {
-      console.error("Error verificando negocio:", businessError);
+      console.error(
+        "Error verificando negocio:",
+        businessError
+      );
 
       return NextResponse.json(
         { error: "No se pudo verificar el negocio." },
@@ -249,7 +252,8 @@ export async function POST(request: NextRequest) {
       if (error.code === "23505") {
         return NextResponse.json(
           {
-            error: "Ese usuario ya está asociado a ese negocio.",
+            error:
+              "Ese usuario ya está asociado a ese negocio.",
           },
           { status: 409 }
         );
@@ -258,13 +262,17 @@ export async function POST(request: NextRequest) {
       if (error.code === "23503") {
         return NextResponse.json(
           {
-            error: "El usuario o el negocio no existe.",
+            error:
+              "El usuario o el negocio no existe.",
           },
           { status: 400 }
         );
       }
 
-      console.error("Error creando business_users:", error);
+      console.error(
+        "Error creando business_users:",
+        error
+      );
 
       return NextResponse.json(
         { error: "No se pudo crear la asociación." },
@@ -280,7 +288,10 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error en POST business-users:", error);
+    console.error(
+      "Error en POST business-users:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Error interno del servidor." },
@@ -318,7 +329,10 @@ export async function DELETE(request: NextRequest) {
       .eq("business_id", businessId);
 
     if (error) {
-      console.error("Error eliminando asociación:", error);
+      console.error(
+        "Error eliminando asociación:",
+        error
+      );
 
       return NextResponse.json(
         { error: "No se pudo eliminar la asociación." },
@@ -330,7 +344,10 @@ export async function DELETE(request: NextRequest) {
       success: true,
     });
   } catch (error) {
-    console.error("Error en DELETE business-users:", error);
+    console.error(
+      "Error en DELETE business-users:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Error interno del servidor." },
