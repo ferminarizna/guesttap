@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
+const PRODUCTION_URL = "https://guesttap-five.vercel.app";
+
 type Business = {
   id: number;
   name: string;
@@ -146,6 +148,8 @@ export default function PanelPage() {
     return null;
   }
 
+  const publicUrl = `${PRODUCTION_URL}/${business.slug}`;
+
   return (
     <main className="min-h-screen bg-[#f7f7f5]">
       <div className="mx-auto max-w-6xl px-5 py-8">
@@ -178,7 +182,7 @@ export default function PanelPage() {
           </div>
 
           <a
-            href={`/${business.slug}`}
+            href={publicUrl}
             target="_blank"
             rel="noreferrer"
             className="rounded-2xl bg-black px-5 py-3 text-center text-sm font-semibold text-white transition hover:bg-neutral-800"
