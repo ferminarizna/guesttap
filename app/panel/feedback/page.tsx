@@ -16,6 +16,87 @@ type Feedback = {
   created_at: string;
 };
 
+function Icon({
+  name,
+  size = 20,
+}: {
+  name: "arrow" | "message" | "star" | "activity";
+  size?: number;
+}) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+
+  if (name === "message") {
+    return (
+      <svg {...common}>
+        <path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-4-.9L4 20l1.2-3.6A7.3 7.3 0 0 1 4.5 12 7.5 7.5 0 0 1 12 4.5c4.1 0 7.5 3.1 8 7Z" />
+        <path d="M8 12h.01M12 12h.01M16 12h.01" />
+      </svg>
+    );
+  }
+
+  if (name === "star") {
+    return (
+      <svg {...common}>
+        <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+      </svg>
+    );
+  }
+
+  if (name === "activity") {
+    return (
+      <svg {...common}>
+        <path d="M3 12h4l2-7 4 14 2-7h6" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...common}>
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+function RatingStars({ rating }: { rating: number }) {
+  return (
+    <div
+      className="flex items-center gap-0.5"
+      aria-label={`${rating} de 5 estrellas`}
+    >
+      {[1, 2, 3, 4, 5].map((star) => (
+        <span
+          key={star}
+          className={
+            star <= rating
+              ? "text-neutral-950"
+              : "text-neutral-200"
+          }
+        >
+          ★
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function formatDate(date: string) {
+  return new Date(date).toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function FeedbackPage() {
   const [business, setBusiness] = useState<Business | null>(null);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
@@ -92,8 +173,10 @@ export default function FeedbackPage() {
   const promedio =
     feedback.length > 0
       ? (
-          feedback.reduce((total, item) => total + item.rating, 0) /
-          feedback.length
+          feedback.reduce(
+            (total, item) => total + item.rating,
+            0
+          ) / feedback.length
         ).toFixed(1)
       : "0.0";
 
@@ -101,13 +184,35 @@ export default function FeedbackPage() {
     (item) => item.message && item.message.trim() !== ""
   );
 
+  const positivas =
+    feedback.length > 0
+      ? Math.round(
+          (feedback.filter((item) => item.rating >= 4).length /
+            feedback.length) *
+            100
+        )
+      : 0;
+
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#f7f7f5] px-5 py-10">
-        <div className="mx-auto max-w-5xl">
-          <p className="text-sm text-neutral-500">
-            Cargando feedback...
-          </p>
+      <main className="min-h-screen bg-[#f6f6f4] px-4 py-5 sm:p-8">
+        <div className="mx-auto max-w-[1100px]">
+          <div className="animate-pulse">
+            <div className="h-10 w-40 rounded-xl bg-neutral-200" />
+
+            <div className="mt-7 h-28 rounded-[24px] bg-neutral-100" />
+
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {[1, 2, 3].map((item) => (
+                <div
+                  key={item}
+                  className="h-28 rounded-2xl bg-neutral-100"
+                />
+              ))}
+            </div>
+
+            <div className="mt-5 h-80 rounded-[24px] bg-neutral-100" />
+          </div>
         </div>
       </main>
     );
@@ -115,13 +220,13 @@ export default function FeedbackPage() {
 
   if (error) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f7f7f5] px-5">
-        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-sm ring-1 ring-black/5">
+      <main className="flex min-h-screen items-center justify-center bg-[#f6f6f4] px-5">
+        <div className="w-full max-w-md rounded-[28px] border border-neutral-200 bg-white p-8 text-center shadow-sm">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-black text-xl font-bold text-white">
             G
           </div>
 
-          <h1 className="mt-6 text-xl font-semibold">
+          <h1 className="mt-6 text-xl font-semibold text-neutral-950">
             No pudimos cargar el feedback
           </h1>
 
@@ -131,9 +236,10 @@ export default function FeedbackPage() {
 
           <a
             href="/panel"
-            className="mt-6 inline-flex rounded-2xl bg-black px-5 py-3 text-sm font-semibold text-white"
+            className="mt-7 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white"
           >
             Volver al panel
+            <Icon name="arrow" size={15} />
           </a>
         </div>
       </main>
@@ -145,166 +251,340 @@ export default function FeedbackPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#f7f7f5] px-5 py-8">
-      <div className="mx-auto max-w-5xl">
+    <main className="min-h-screen bg-[#f6f6f4] text-neutral-950">
 
-        <header className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-400">
-              GuestTap
-            </p>
+      {/* HEADER */}
 
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-neutral-900">
+      <header className="border-b border-neutral-200 bg-white">
+        <div className="mx-auto max-w-[1100px] px-4 sm:px-7 lg:px-8">
+
+          <div className="flex items-center justify-between py-4 sm:py-5">
+
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-400 sm:text-[10px]">
+                GuestTap
+              </p>
+
+              <h1 className="mt-1 text-lg font-semibold tracking-tight sm:text-xl">
+                Feedback
+              </h1>
+            </div>
+
+            <a
+              href="/panel"
+              className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-neutral-700 transition hover:bg-neutral-50 sm:px-4"
+            >
+              <span className="hidden sm:inline">
+                Volver al panel
+              </span>
+
+              <span className="sm:hidden">
+                Volver
+              </span>
+
+              <Icon name="arrow" size={14} />
+            </a>
+
+          </div>
+
+          {/* NAVEGACIÓN */}
+
+          <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-3">
+
+            <a
+              href="/panel"
+              className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950"
+            >
+              Resumen
+            </a>
+
+            <a
+              href="/panel/feedback"
+              className="flex shrink-0 items-center gap-1.5 rounded-xl bg-black px-3 py-2.5 text-[11px] font-semibold text-white"
+            >
+              <Icon name="message" size={14} />
               Feedback
-            </h1>
+            </a>
 
-            <p className="mt-2 text-sm text-neutral-500">
-              Comentarios recibidos de los clientes de {business.name}.
-            </p>
-          </div>
+            <a
+              href="/panel/qr"
+              className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950"
+            >
+              Mi QR
+            </a>
 
-          <a
-            href="/panel"
-            className="rounded-2xl border border-neutral-200 bg-white px-5 py-3 text-center text-sm font-medium text-neutral-700 transition hover:bg-neutral-50"
-          >
-            Volver al resumen
-          </a>
-        </header>
+            <a
+              href="/panel/configuracion"
+              className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950"
+            >
+              Configuración
+            </a>
 
-        <nav className="mt-6 flex gap-2 overflow-x-auto rounded-2xl bg-white p-2 shadow-sm ring-1 ring-black/5">
-          <a
-            href="/panel"
-            className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-medium text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900"
-          >
-            Resumen
-          </a>
+          </nav>
 
-          <a
-            href="/panel/feedback"
-            className="shrink-0 rounded-xl bg-black px-4 py-2.5 text-sm font-semibold text-white"
-          >
-            Feedback
-          </a>
+        </div>
+      </header>
 
-          <a
-            href="/panel/qr"
-            className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-medium text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900"
-          >
-            Mi QR
-          </a>
+      {/* CONTENIDO */}
 
-          <a
-            href="/panel/configuracion"
-            className="shrink-0 rounded-xl px-4 py-2.5 text-sm font-medium text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900"
-          >
-            Configuración
-          </a>
-        </nav>
+      <div className="px-4 py-6 sm:px-7 sm:py-9 lg:px-8">
 
-        <section className="mt-8 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-            <p className="text-sm text-neutral-500">
-              Valoraciones
+        <div className="mx-auto max-w-[1100px]">
+
+          {/* INTRO */}
+
+          <section>
+
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">
+              {business.name}
             </p>
 
-            <p className="mt-3 text-4xl font-semibold tracking-tight">
-              {feedback.length}
-            </p>
-
-            <p className="mt-2 text-sm text-neutral-400">
-              totales
-            </p>
-          </div>
-
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-            <p className="text-sm text-neutral-500">
-              Promedio
-            </p>
-
-            <p className="mt-3 text-4xl font-semibold tracking-tight">
-              {promedio}
-            </p>
-
-            <p className="mt-2 text-sm text-neutral-400">
-              sobre 5 estrellas
-            </p>
-          </div>
-
-          <div className="rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-            <p className="text-sm text-neutral-500">
-              Feedback privado
-            </p>
-
-            <p className="mt-3 text-4xl font-semibold tracking-tight">
-              {privados.length}
-            </p>
-
-            <p className="mt-2 text-sm text-neutral-400">
-              comentarios
-            </p>
-          </div>
-        </section>
-
-        <section className="mt-6 rounded-3xl bg-white p-6 shadow-sm ring-1 ring-black/5">
-          <div>
-            <h2 className="text-lg font-semibold">
-              Comentarios de clientes
+            <h2 className="mt-1 text-[28px] font-semibold tracking-[-0.04em] sm:text-4xl">
+              Opiniones de clientes
             </h2>
 
-            <p className="mt-1 text-sm text-neutral-500">
-              Acá aparecen los comentarios privados enviados desde GuestTap.
+            <p className="mt-2 max-w-xl text-xs leading-5 text-neutral-500 sm:text-sm sm:leading-6">
+              Revisá las opiniones que tus clientes dejan a través de GuestTap.
             </p>
-          </div>
 
-          {privados.length === 0 ? (
-            <div className="mt-6 rounded-2xl bg-neutral-50 p-8 text-center">
-              <div className="text-3xl">
-                💬
-              </div>
+          </section>
 
-              <p className="mt-4 text-sm font-medium text-neutral-700">
-                Todavía no hay comentarios privados.
-              </p>
+          {/* RESUMEN */}
 
-              <p className="mt-2 text-sm leading-6 text-neutral-400">
-                Cuando un cliente deje un comentario, aparecerá acá.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-6 divide-y divide-neutral-100">
-              {privados.map((item) => (
-                <article
-                  key={item.id}
-                  className="py-6 first:pt-0 last:pb-0"
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="text-lg">
-                        {"★".repeat(item.rating)}
+          <section className="mt-6 overflow-hidden rounded-[24px] bg-[#111111] text-white sm:mt-8">
 
-                        <span className="text-neutral-200">
-                          {"★".repeat(5 - item.rating)}
-                        </span>
-                      </div>
+            <div className="grid sm:grid-cols-[1.1fr_0.9fr]">
 
-                      <p className="mt-3 text-sm leading-7 text-neutral-700">
-                        {item.message}
-                      </p>
-                    </div>
+              {/* PROMEDIO */}
 
-                    <p className="shrink-0 text-xs text-neutral-400">
-                      {new Date(item.created_at).toLocaleDateString(
-                        "es-AR"
-                      )}
+              <div className="p-5 sm:p-7">
+
+                <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/35 sm:text-[10px]">
+                  Resumen
+                </p>
+
+                <div className="mt-5 flex items-end gap-4">
+
+                  <div>
+                    <p className="text-[52px] font-semibold leading-none tracking-[-0.07em] sm:text-6xl">
+                      {promedio}
+                    </p>
+
+                    <p className="mt-1.5 text-[10px] text-white/40 sm:text-xs">
+                      promedio sobre 5
                     </p>
                   </div>
-                </article>
-              ))}
+
+                  <div className="pb-1">
+
+                    <div className="text-lg tracking-[2px]">
+                      <span className="text-white">
+                        {"★".repeat(
+                          Math.min(
+                            5,
+                            Math.max(
+                              0,
+                              Math.round(Number(promedio))
+                            )
+                          )
+                        )}
+                      </span>
+
+                      <span className="text-white/15">
+                        {"★".repeat(
+                          5 -
+                            Math.min(
+                              5,
+                              Math.max(
+                                0,
+                                Math.round(Number(promedio))
+                              )
+                            )
+                        )}
+                      </span>
+                    </div>
+
+                    <p className="mt-1 text-[10px] text-white/40">
+                      {feedback.length}{" "}
+                      {feedback.length === 1
+                        ? "valoración"
+                        : "valoraciones"}
+                    </p>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+              {/* DATOS */}
+
+              <div className="grid grid-cols-2 border-t border-white/10 sm:border-l sm:border-t-0">
+
+                <div className="border-r border-white/10 p-5 sm:p-7">
+
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
+                    Positivas
+                  </p>
+
+                  <p className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+                    {positivas}%
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-white/40 sm:text-xs">
+                    4 y 5 estrellas
+                  </p>
+
+                </div>
+
+                <div className="p-5 sm:p-7">
+
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
+                    Comentarios
+                  </p>
+
+                  <p className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+                    {privados.length}
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-white/40 sm:text-xs">
+                    feedback privado
+                  </p>
+
+                </div>
+
+              </div>
+
             </div>
-          )}
-        </section>
+
+          </section>
+
+          {/* LISTADO */}
+
+          <section className="mt-5 overflow-hidden rounded-[24px] border border-neutral-200 bg-white">
+
+            <div className="border-b border-neutral-200 px-5 py-5 sm:px-6">
+
+              <div className="flex items-center justify-between gap-4">
+
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neutral-400 sm:text-[10px]">
+                    Feedback privado
+                  </p>
+
+                  <h3 className="mt-1 text-base font-semibold tracking-tight sm:text-lg">
+                    Comentarios de clientes
+                  </h3>
+                </div>
+
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100">
+                  <Icon name="message" size={16} />
+                </div>
+
+              </div>
+
+              <p className="mt-2 text-[11px] leading-5 text-neutral-500 sm:text-xs">
+                Estos comentarios son privados y solo están disponibles para tu negocio.
+              </p>
+
+            </div>
+
+            {privados.length === 0 ? (
+              <div className="px-5 py-14 text-center sm:px-6 sm:py-16">
+
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100">
+                  <Icon name="message" size={19} />
+                </div>
+
+                <p className="mt-4 text-sm font-semibold">
+                  Todavía no hay comentarios
+                </p>
+
+                <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-neutral-500">
+                  Cuando un cliente deje un comentario privado desde GuestTap, aparecerá acá.
+                </p>
+
+              </div>
+            ) : (
+              <div>
+
+                {privados.map((item) => (
+                  <article
+                    key={item.id}
+                    className="border-b border-neutral-100 px-5 py-5 last:border-b-0 sm:px-6 sm:py-6"
+                  >
+
+                    <div className="flex gap-3 sm:gap-4">
+
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-[10px] font-semibold sm:h-11 sm:w-11 sm:text-xs">
+                        {item.rating}/5
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+
+                        <div className="flex flex-wrap items-center gap-2.5">
+
+                          <RatingStars rating={item.rating} />
+
+                          <span className="text-[10px] text-neutral-400 sm:text-[11px]">
+                            {formatDate(item.created_at)}
+                          </span>
+
+                        </div>
+
+                        <p className="mt-3 text-xs leading-6 text-neutral-700 sm:text-sm sm:leading-7">
+                          {item.message}
+                        </p>
+
+                      </div>
+
+                    </div>
+
+                  </article>
+                ))}
+
+              </div>
+            )}
+
+          </section>
+
+          {/* TODAS LAS VALORACIONES */}
+
+          <section className="mt-4 rounded-[22px] border border-neutral-200 bg-white px-5 py-5 sm:px-6">
+
+            <div className="flex items-center gap-3">
+
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100">
+                <Icon name="activity" size={16} />
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold sm:text-sm">
+                  {feedback.length}{" "}
+                  {feedback.length === 1
+                    ? "valoración recibida"
+                    : "valoraciones recibidas"}
+                </p>
+
+                <p className="mt-0.5 text-[10px] text-neutral-500 sm:text-xs">
+                  Incluyendo las valoraciones sin comentario.
+                </p>
+              </div>
+
+            </div>
+
+          </section>
+
+          <footer className="py-8 text-center">
+            <p className="text-[9px] text-neutral-400 sm:text-[10px]">
+              GuestTap · Panel de gestión
+            </p>
+          </footer>
+
+        </div>
 
       </div>
+
     </main>
   );
 }
