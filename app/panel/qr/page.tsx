@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import QRCode from "qrcode";
+
 import { supabase } from "../../../lib/supabase";
 
 type Business = {
@@ -129,7 +131,7 @@ export default function ClientQRPage() {
       return;
     }
 
-    const url = `${PRODUCTION_URL}/${businessData.slug}`;
+    const url = `${PRODUCTION_URL}/go/${businessData.slug}`;
 
     try {
       const qrDataUrl = await QRCode.toDataURL(url, {
@@ -152,6 +154,7 @@ export default function ClientQRPage() {
     if (!qr || !business) return;
 
     const link = document.createElement("a");
+
     link.href = qr;
     link.download = `guesttap-${business.slug}.png`;
     link.click();
@@ -160,7 +163,7 @@ export default function ClientQRPage() {
   async function copiarEnlace() {
     if (!business) return;
 
-    const publicUrl = `${PRODUCTION_URL}/${business.slug}`;
+    const publicUrl = `${PRODUCTION_URL}/go/${business.slug}`;
 
     try {
       await navigator.clipboard.writeText(publicUrl);
@@ -183,9 +186,13 @@ export default function ClientQRPage() {
 
             <div className="mx-auto mt-8 max-w-3xl rounded-[28px] bg-white p-6 sm:p-10">
               <div className="mx-auto h-7 w-52 rounded bg-neutral-200" />
+
               <div className="mx-auto mt-3 h-4 w-72 rounded bg-neutral-100" />
+
               <div className="mx-auto mt-8 h-72 w-72 rounded-3xl bg-neutral-100 sm:h-80 sm:w-80" />
+
               <div className="mt-8 h-12 rounded-xl bg-neutral-100" />
+
               <div className="mt-3 h-12 rounded-xl bg-neutral-200" />
             </div>
           </div>
@@ -226,16 +233,14 @@ export default function ClientQRPage() {
     return null;
   }
 
-  const publicUrl = `${PRODUCTION_URL}/${business.slug}`;
+  const publicUrl = `${PRODUCTION_URL}/go/${business.slug}`;
 
   return (
     <main className="min-h-screen bg-[#f6f6f4] text-neutral-950">
-
       {/* HEADER */}
 
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-[1100px] items-center justify-between px-4 py-4 sm:px-7 sm:py-5 lg:px-8">
-
           <div>
             <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-400 sm:text-[10px]">
               GuestTap
@@ -260,20 +265,17 @@ export default function ClientQRPage() {
 
             <Icon name="arrow" size={14} />
           </a>
-
         </div>
       </header>
 
       {/* CONTENIDO */}
 
       <div className="px-4 py-6 sm:px-7 sm:py-10 lg:px-8">
-
         <div className="mx-auto max-w-[1000px]">
 
           {/* INTRO */}
 
           <div className="mx-auto max-w-2xl text-center">
-
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">
               Tu GuestTap
             </p>
@@ -285,49 +287,40 @@ export default function ClientQRPage() {
             <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-neutral-500 sm:text-sm sm:leading-6">
               Tus clientes pueden escanear este código para acceder directamente a la página de {business.name}.
             </p>
-
           </div>
 
           {/* QR CARD */}
 
           <section className="mx-auto mt-7 max-w-3xl overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-[0_10px_40px_rgba(0,0,0,0.04)] sm:mt-9">
-
             <div className="grid lg:grid-cols-[1fr_0.8fr]">
 
               {/* QR */}
 
               <div className="flex flex-col items-center justify-center border-b border-neutral-200 px-5 py-7 sm:px-8 sm:py-9 lg:border-b-0 lg:border-r">
-
                 <div className="flex items-center gap-2">
-
                   <span className="h-2 w-2 rounded-full bg-green-500" />
 
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-400">
                     QR activo
                   </p>
-
                 </div>
 
                 <div className="mt-6 rounded-[28px] border border-neutral-200 bg-white p-3 shadow-sm sm:p-4">
-
                   <img
                     src={qr}
                     alt={`Código QR de ${business.name}`}
                     className="h-[250px] w-[250px] sm:h-[320px] sm:w-[320px]"
                   />
-
                 </div>
 
                 <p className="mt-5 text-center text-xs text-neutral-400">
                   Escaneá el código para probarlo.
                 </p>
-
               </div>
 
               {/* INFO */}
 
               <div className="flex flex-col justify-center px-5 py-7 sm:px-8 sm:py-9">
-
                 <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-neutral-400">
                   Destino
                 </p>
@@ -343,7 +336,6 @@ export default function ClientQRPage() {
                 {/* URL */}
 
                 <div className="mt-6">
-
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
                       Enlace
@@ -373,13 +365,11 @@ export default function ClientQRPage() {
                       {publicUrl}
                     </p>
                   </div>
-
                 </div>
 
                 {/* ACTIONS */}
 
                 <div className="mt-5 space-y-2.5">
-
                   <button
                     type="button"
                     onClick={descargarQR}
@@ -398,21 +388,15 @@ export default function ClientQRPage() {
                     Ver página pública
                     <Icon name="external" size={15} />
                   </a>
-
                 </div>
-
               </div>
-
             </div>
-
           </section>
 
           {/* INFO EXTRA */}
 
           <section className="mx-auto mt-4 max-w-3xl rounded-[22px] border border-neutral-200 bg-white px-5 py-5 sm:px-6">
-
             <div className="flex items-start gap-3">
-
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100">
                 <Icon name="check" size={16} />
               </div>
@@ -426,9 +410,7 @@ export default function ClientQRPage() {
                   Imprimilo, colocálo en mesas, mostradores, habitaciones, cartelería o cualquier otro punto de contacto con tus clientes.
                 </p>
               </div>
-
             </div>
-
           </section>
 
           <footer className="py-8 text-center">
@@ -438,9 +420,7 @@ export default function ClientQRPage() {
           </footer>
 
         </div>
-
       </div>
-
     </main>
   );
 }
