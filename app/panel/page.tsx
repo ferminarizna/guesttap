@@ -143,11 +143,7 @@ function RatingStars({ rating }: { rating: number }) {
       {[1, 2, 3, 4, 5].map((star) => (
         <span
           key={star}
-          className={
-            star <= rating
-              ? "text-neutral-950"
-              : "text-neutral-200"
-          }
+          className={star <= rating ? "text-neutral-950" : "text-neutral-200"}
         >
           ★
         </span>
@@ -166,6 +162,7 @@ function formatDate(date: string) {
 export default function PanelPage() {
   const [business, setBusiness] = useState<Business | null>(null);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
+  const [scanCount, setScanCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -232,16 +229,28 @@ export default function PanelPage() {
     }
 
     setFeedback(feedbackData || []);
+
+    const { count, error: scanError } = await supabase
+      .from("scan_events")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessData.id);
+
+    if (scanError) {
+      console.error(scanError);
+      setError("No pudimos cargar los escaneos.");
+      setLoading(false);
+      return;
+    }
+
+    setScanCount(count ?? 0);
     setLoading(false);
   }
 
   const promedio =
     feedback.length > 0
       ? (
-          feedback.reduce(
-            (total, item) => total + item.rating,
-            0
-          ) / feedback.length
+          feedback.reduce((total, item) => total + item.rating, 0) /
+          feedback.length
         ).toFixed(1)
       : "0.0";
 
@@ -346,10 +355,9 @@ export default function PanelPage() {
       <div className="mx-auto max-w-[1440px] p-0 sm:p-4 lg:p-5">
         <div className="flex min-h-screen overflow-hidden bg-white sm:min-h-[calc(100vh-32px)] sm:rounded-[30px] sm:border sm:border-neutral-200 sm:shadow-[0_12px_50px_rgba(0,0,0,0.045)]">
 
-          {/* SIDEBAR DESKTOP */}
+          {/* SIDEBAR */}
 
           <aside className="hidden w-[235px] shrink-0 border-r border-neutral-200 bg-[#fafaf9] md:flex md:flex-col">
-
             <div className="px-6 py-7">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-black text-sm font-bold text-white">
@@ -436,15 +444,9 @@ export default function PanelPage() {
           {/* CONTENIDO */}
 
           <div className="min-w-0 flex-1">
-
-            {/* HEADER */}
-
             <header className="border-b border-neutral-200 px-4 py-4 sm:px-7 sm:py-5 lg:px-9">
-
               <div className="flex items-center justify-between gap-3">
-
                 <div className="flex min-w-0 items-center gap-3">
-
                   {business.logo_url ? (
                     <img
                       src={business.logo_url}
@@ -466,7 +468,6 @@ export default function PanelPage() {
                       {business.name}
                     </h1>
                   </div>
-
                 </div>
 
                 <a
@@ -475,20 +476,11 @@ export default function PanelPage() {
                   rel="noreferrer"
                   className="flex shrink-0 items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-[11px] font-semibold text-neutral-900 transition hover:bg-neutral-50 sm:px-4 sm:text-xs"
                 >
-                  <span className="hidden xs:inline">
-                    Ver página
-                  </span>
-
-                  <span className="sm:hidden">
-                    Página
-                  </span>
-
+                  <span className="hidden sm:inline">Ver página</span>
+                  <span className="sm:hidden">Página</span>
                   <Icon name="external" size={13} />
                 </a>
-
               </div>
-
-              {/* NAVEGACIÓN MOBILE */}
 
               <nav className="-mx-1 mt-4 flex gap-1 overflow-x-auto px-1 pb-0.5 md:hidden">
                 {navigation.map((item) => (
@@ -506,20 +498,15 @@ export default function PanelPage() {
                   </a>
                 ))}
               </nav>
-
             </header>
 
-            {/* MAIN */}
-
             <div className="px-4 py-6 sm:px-7 sm:py-9 lg:px-9">
-
               <div className="mx-auto max-w-[1180px]">
 
                 {/* INTRO */}
 
                 <section>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-
                     <div>
                       <p className="text-[11px] font-medium text-neutral-400 sm:text-xs">
                         Resumen
@@ -538,28 +525,21 @@ export default function PanelPage() {
                       <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
                       Todo funcionando
                     </div>
-
                   </div>
                 </section>
 
                 {/* REPUTACIÓN */}
 
                 <section className="mt-6 overflow-hidden rounded-[22px] bg-[#111111] text-white sm:mt-8 sm:rounded-[26px]">
-
                   <div className="p-5 sm:p-7 lg:p-8">
-
                     <div className="grid gap-7 md:grid-cols-[1.15fr_0.85fr] md:gap-0">
 
-                      {/* RATING */}
-
                       <div className="md:border-r md:border-white/10 md:pr-8">
-
                         <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/35 sm:text-[10px]">
                           Reputación actual
                         </p>
 
                         <div className="mt-5 flex items-end gap-4 sm:mt-7 sm:gap-6">
-
                           <div>
                             <p className="text-[56px] font-semibold leading-none tracking-[-0.07em] sm:text-7xl">
                               {promedio}
@@ -571,16 +551,12 @@ export default function PanelPage() {
                           </div>
 
                           <div className="pb-1">
-
                             <div className="text-lg tracking-[2px] sm:text-xl sm:tracking-[3px]">
                               <span className="text-white">
                                 {"★".repeat(
                                   Math.min(
                                     5,
-                                    Math.max(
-                                      0,
-                                      Math.round(Number(promedio))
-                                    )
+                                    Math.max(0, Math.round(Number(promedio)))
                                   )
                                 )}
                               </span>
@@ -605,17 +581,11 @@ export default function PanelPage() {
                                 ? "valoración"
                                 : "valoraciones"}
                             </p>
-
                           </div>
-
                         </div>
-
                       </div>
 
-                      {/* RESUMEN */}
-
                       <div className="grid grid-cols-2 gap-0 md:pl-8">
-
                         <div className="border-r border-white/10 pr-4 sm:pr-8">
                           <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
                             Positivas
@@ -643,23 +613,20 @@ export default function PanelPage() {
                             comentarios privados
                           </p>
                         </div>
-
                       </div>
 
                     </div>
-
                   </div>
-
                 </section>
 
-                {/* METRICAS */}
+                {/* MÉTRICAS */}
 
-                <section className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-3 sm:gap-4">
+                <section className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-4 sm:gap-4">
+
+                  {/* VALORACIONES */}
 
                   <div className="rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
-
                     <div className="flex items-center justify-between">
-
                       <p className="text-[10px] font-medium text-neutral-500 sm:text-xs">
                         Valoraciones
                       </p>
@@ -667,7 +634,6 @@ export default function PanelPage() {
                       <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 sm:h-8 sm:w-8">
                         <Icon name="activity" size={14} />
                       </div>
-
                     </div>
 
                     <p className="mt-3 text-2xl font-semibold tracking-tight sm:mt-4 sm:text-3xl">
@@ -677,13 +643,34 @@ export default function PanelPage() {
                     <p className="mt-1 text-[10px] text-neutral-400 sm:text-xs">
                       recibidas
                     </p>
-
                   </div>
 
+                  {/* ESCANEOS */}
+
                   <div className="rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
-
                     <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-medium text-neutral-500 sm:text-xs">
+                        Escaneos
+                      </p>
 
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 sm:h-8 sm:w-8">
+                        <Icon name="qr" size={14} />
+                      </div>
+                    </div>
+
+                    <p className="mt-3 text-2xl font-semibold tracking-tight sm:mt-4 sm:text-3xl">
+                      {scanCount}
+                    </p>
+
+                    <p className="mt-1 text-[10px] text-neutral-400 sm:text-xs">
+                      accesos mediante QR
+                    </p>
+                  </div>
+
+                  {/* FEEDBACK */}
+
+                  <div className="rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
+                    <div className="flex items-center justify-between">
                       <p className="text-[10px] font-medium text-neutral-500 sm:text-xs">
                         Feedback privado
                       </p>
@@ -691,7 +678,6 @@ export default function PanelPage() {
                       <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 sm:h-8 sm:w-8">
                         <Icon name="message" size={14} />
                       </div>
-
                     </div>
 
                     <p className="mt-3 text-2xl font-semibold tracking-tight sm:mt-4 sm:text-3xl">
@@ -701,13 +687,12 @@ export default function PanelPage() {
                     <p className="mt-1 text-[10px] text-neutral-400 sm:text-xs">
                       comentarios
                     </p>
-
                   </div>
 
+                  {/* ESTADO */}
+
                   <div className="col-span-2 rounded-2xl border border-neutral-200 bg-white p-4 sm:col-span-1 sm:p-5">
-
                     <div className="flex items-center justify-between">
-
                       <p className="text-[10px] font-medium text-neutral-500 sm:text-xs">
                         Estado
                       </p>
@@ -715,23 +700,19 @@ export default function PanelPage() {
                       <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700 sm:h-8 sm:w-8">
                         <Icon name="check" size={14} />
                       </div>
-
                     </div>
 
                     <div className="mt-3 flex items-baseline gap-2 sm:mt-4">
-
                       <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
                         Activo
                       </p>
 
                       <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-
                     </div>
 
                     <p className="mt-1 text-[10px] text-neutral-400 sm:text-xs">
                       Tu GuestTap funciona correctamente
                     </p>
-
                   </div>
 
                 </section>
@@ -740,12 +721,8 @@ export default function PanelPage() {
 
                 <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_310px] lg:gap-5">
 
-                  {/* OPINIONES */}
-
                   <div className="overflow-hidden rounded-[22px] border border-neutral-200 bg-white">
-
                     <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4.5 sm:px-6 sm:py-5">
-
                       <div>
                         <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-neutral-400 sm:text-[10px]">
                           Actividad
@@ -760,22 +737,14 @@ export default function PanelPage() {
                         href="/panel/feedback"
                         className="flex items-center gap-1 rounded-lg px-2 py-2 text-[10px] font-semibold text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950 sm:px-3 sm:text-xs"
                       >
-                        <span className="hidden sm:inline">
-                          Ver todas
-                        </span>
-
-                        <span className="sm:hidden">
-                          Todas
-                        </span>
-
+                        <span className="hidden sm:inline">Ver todas</span>
+                        <span className="sm:hidden">Todas</span>
                         <Icon name="arrow" size={13} />
                       </a>
-
                     </div>
 
                     {feedback.length === 0 ? (
                       <div className="px-5 py-14 text-center sm:px-6 sm:py-16">
-
                         <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-100">
                           <Icon name="message" size={18} />
                         </div>
@@ -787,42 +756,33 @@ export default function PanelPage() {
                         <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-neutral-500">
                           Las opiniones de tus clientes aparecerán acá.
                         </p>
-
                       </div>
                     ) : (
                       <div>
-
                         {feedback.slice(0, 8).map((item) => (
                           <div
                             key={item.id}
                             className="flex gap-3 border-b border-neutral-100 px-5 py-4 last:border-b-0 sm:gap-4 sm:px-6 sm:py-5"
                           >
-
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-[10px] font-semibold sm:h-10 sm:w-10 sm:text-xs">
                               {item.rating}/5
                             </div>
 
                             <div className="min-w-0 flex-1">
-
                               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-
                                 <RatingStars rating={item.rating} />
 
                                 <span className="text-[9px] text-neutral-400 sm:text-[11px]">
                                   {formatDate(item.created_at)}
                                 </span>
-
                               </div>
 
                               <p className="mt-1.5 truncate text-xs font-medium text-neutral-800 sm:text-sm">
                                 {item.message || "Sin comentario"}
                               </p>
-
                             </div>
-
                           </div>
                         ))}
-
                       </div>
                     )}
 
@@ -836,19 +796,14 @@ export default function PanelPage() {
                         </a>
                       </div>
                     )}
-
                   </div>
 
                   {/* LATERAL */}
 
                   <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
 
-                    {/* ESTADO */}
-
                     <div className="rounded-[22px] border border-neutral-200 bg-white p-5 sm:p-6">
-
                       <div className="flex items-start justify-between">
-
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-neutral-400 sm:text-[10px]">
                             Tu GuestTap
@@ -862,11 +817,9 @@ export default function PanelPage() {
                         <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-100">
                           <Icon name="check" size={15} />
                         </div>
-
                       </div>
 
                       <div className="mt-5 space-y-3">
-
                         <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
                           <span className="text-[11px] text-neutral-500">
                             Página pública
@@ -899,15 +852,10 @@ export default function PanelPage() {
                             Activo
                           </span>
                         </div>
-
                       </div>
-
                     </div>
 
-                    {/* ACCIONES */}
-
                     <div className="rounded-[22px] bg-[#111111] p-5 text-white sm:p-6">
-
                       <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/35 sm:text-[10px]">
                         Acciones rápidas
                       </p>
@@ -917,7 +865,6 @@ export default function PanelPage() {
                       </h3>
 
                       <div className="mt-4 grid gap-2 sm:mt-5 lg:grid-cols-1">
-
                         <a
                           href="/panel/qr"
                           className="flex items-center justify-between rounded-xl bg-white/10 px-3.5 py-3 text-xs font-medium transition hover:bg-white/15"
@@ -953,28 +900,21 @@ export default function PanelPage() {
 
                           <Icon name="arrow" size={14} />
                         </a>
-
                       </div>
-
                     </div>
-
                   </div>
-
                 </section>
 
                 {/* PÁGINA PÚBLICA */}
 
                 <section className="mt-4 sm:mt-5">
-
                   <a
                     href={publicUrl}
                     target="_blank"
                     rel="noreferrer"
                     className="group flex items-center justify-between rounded-[20px] border border-neutral-200 bg-white px-4 py-4 transition hover:border-neutral-300 hover:shadow-sm sm:px-6 sm:py-5"
                   >
-
                     <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-
                       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 sm:h-10 sm:w-10">
                         <Icon name="external" size={16} />
                       </div>
@@ -988,15 +928,12 @@ export default function PanelPage() {
                           Así ven tus clientes tu GuestTap.
                         </p>
                       </div>
-
                     </div>
 
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 transition group-hover:bg-neutral-100 sm:h-9 sm:w-9">
                       <Icon name="arrow" size={14} />
                     </div>
-
                   </a>
-
                 </section>
 
                 <footer className="py-7 text-center sm:py-8">
@@ -1004,10 +941,8 @@ export default function PanelPage() {
                     GuestTap · Panel de gestión
                   </p>
                 </footer>
-
               </div>
             </div>
-
           </div>
         </div>
       </div>

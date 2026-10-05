@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
 type Language = "es" | "en" | "pt";
@@ -20,83 +20,91 @@ type Step = "rating" | "result" | "feedback" | "sent";
 
 const translations = {
   es: {
-    experience: "Tu experiencia",
+    experienceLabel: "TU EXPERIENCIA",
     question: "¿Cómo fue tu experiencia?",
     subtitle: "Tu opinión nos ayuda a mejorar.",
-    thanks: "Gracias por tu valoración.",
-    share: "¿Querés compartir tu experiencia?",
+    terrible: "Muy mala",
+    excellent: "Excelente",
+    privateFeedback: "Tu valoración se registra de forma privada.",
+    ratingSelected: "Gracias por tu valoración.",
+    ratingPrivate: "Tu valoración fue registrada.",
+    shareText:
+      "Si querés contar cómo fue tu experiencia, también podés compartirla en Google.",
     google: "Compartir en Google",
-    feedback: "Contarnos qué podemos mejorar",
-    notNow: "Ahora no",
+    feedbackOption: "Contarnos qué podemos mejorar",
     feedbackTitle: "Queremos escucharte",
     feedbackText:
-      "Contanos brevemente qué podríamos hacer mejor.",
+      "Contanos brevemente qué podríamos hacer mejor. Tu comentario ayuda al establecimiento a mejorar.",
     placeholder: "Contanos qué pasó...",
     send: "Enviar comentario",
-    sentTitle: "Gracias por tu opinión.",
-    sentText: "Tu experiencia fue registrada correctamente.",
-    finish: "Terminar",
+    sentTitle: "Gracias por tu opinión",
+    sentText: "Tu comentario fue enviado al establecimiento.",
     back: "Volver",
     loading: "Cargando...",
+    finish: "Terminar",
+    notNow: "Ahora no",
   },
 
   en: {
-    experience: "Your experience",
+    experienceLabel: "YOUR EXPERIENCE",
     question: "How was your experience?",
     subtitle: "Your feedback helps us improve.",
-    thanks: "Thanks for your rating.",
-    share: "Would you like to share your experience?",
+    terrible: "Very poor",
+    excellent: "Excellent",
+    privateFeedback: "Your rating is recorded privately.",
+    ratingSelected: "Thanks for your rating.",
+    ratingPrivate: "Your rating was recorded.",
+    shareText:
+      "If you'd like to tell others about your experience, you can also share it on Google.",
     google: "Share on Google",
-    feedback: "Tell us what we could improve",
-    notNow: "Not now",
+    feedbackOption: "Tell us what we could improve",
     feedbackTitle: "We want to hear from you",
     feedbackText:
-      "Tell us briefly what we could do better.",
+      "Tell us briefly what we could do better. Your feedback helps the business improve.",
     placeholder: "Tell us what happened...",
     send: "Send feedback",
-    sentTitle: "Thank you for your feedback.",
-    sentText: "Your experience was successfully recorded.",
-    finish: "Finish",
+    sentTitle: "Thank you for your feedback",
+    sentText: "Your comment was sent to the business.",
     back: "Back",
     loading: "Loading...",
+    finish: "Finish",
+    notNow: "Not now",
   },
 
   pt: {
-    experience: "Sua experiência",
+    experienceLabel: "SUA EXPERIÊNCIA",
     question: "Como foi sua experiência?",
     subtitle: "Sua opinião nos ajuda a melhorar.",
-    thanks: "Obrigado pela sua avaliação.",
-    share: "Quer compartilhar sua experiência?",
+    terrible: "Muito ruim",
+    excellent: "Excelente",
+    privateFeedback: "Sua avaliação é registrada de forma privada.",
+    ratingSelected: "Obrigado pela sua avaliação.",
+    ratingPrivate: "Sua avaliação foi registrada.",
+    shareText:
+      "Se quiser contar como foi sua experiência, você também pode compartilhá-la no Google.",
     google: "Compartilhar no Google",
-    feedback: "Conte o que podemos melhorar",
-    notNow: "Agora não",
+    feedbackOption: "Conte o que podemos melhorar",
     feedbackTitle: "Queremos ouvir você",
     feedbackText:
-      "Conte brevemente o que poderíamos fazer melhor.",
+      "Conte brevemente o que poderíamos fazer melhor. Seu comentário ajuda o estabelecimento a melhorar.",
     placeholder: "Conte o que aconteceu...",
     send: "Enviar comentário",
-    sentTitle: "Obrigado pela sua opinião.",
-    sentText: "Sua experiência foi registrada corretamente.",
-    finish: "Finalizar",
+    sentTitle: "Obrigado pela sua opinião",
+    sentText: "Seu comentário foi enviado ao estabelecimento.",
     back: "Voltar",
     loading: "Carregando...",
+    finish: "Finalizar",
+    notNow: "Agora não",
   },
 };
 
 function detectarIdioma(): Language {
-  if (typeof navigator === "undefined") {
-    return "es";
-  }
+  if (typeof navigator === "undefined") return "es";
 
   const idioma = navigator.language.toLowerCase();
 
-  if (idioma.startsWith("pt")) {
-    return "pt";
-  }
-
-  if (idioma.startsWith("en")) {
-    return "en";
-  }
+  if (idioma.startsWith("pt")) return "pt";
+  if (idioma.startsWith("en")) return "en";
 
   return "es";
 }
@@ -124,24 +132,24 @@ function StarIcon({
   );
 }
 
-function InstagramIcon() {
+function InstagramIcon({ className = "" }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.7"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-4 w-4"
+      className={className}
       aria-hidden="true"
     >
-      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <rect x="3.5" y="3.5" width="17" height="17" rx="5" />
       <circle cx="12" cy="12" r="4" />
       <circle
         cx="17.4"
         cy="6.6"
-        r="0.8"
+        r="0.7"
         fill="currentColor"
         stroke="none"
       />
@@ -149,37 +157,20 @@ function InstagramIcon() {
   );
 }
 
-function WhatsAppIcon() {
+function WhatsAppIcon({ className = "" }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.7"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className="h-4 w-4"
+      className={className}
       aria-hidden="true"
     >
-      <path d="M20 11.2a8 8 0 0 1-11.8 7L4 19l.9-4.1A8 8 0 1 1 20 11.2Z" />
-      <path d="M8.5 8.4c.2-.4.4-.4.7-.4h.5c.2 0 .4.1.5.4l.6 1.4c.1.2.1.4-.1.6l-.5.6c.7 1.2 1.5 1.9 2.7 2.4l.6-.7c.2-.2.4-.2.6-.1l1.4.7c.2.1.3.3.2.5-.2.7-.8 1.2-1.5 1.3-1.1.1-2.9-.8-4.1-1.9-1.2-1.1-2.1-2.8-2.2-3.9-.1-.3.1-.7.6-.9Z" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="h-7 w-7"
-      aria-hidden="true"
-    >
-      <path d="M5 12.5l4.2 4.2L19 7" />
+      <path d="M20.2 11.3a8.1 8.1 0 0 1-12 7.1L4 19.5l1.1-3.9A8.1 8.1 0 1 1 20.2 11.3Z" />
+      <path d="M8.7 8.2c.2-.4.4-.4.7-.4h.5c.2 0 .4.1.5.4l.7 1.5c.1.3.1.5-.1.7l-.5.6c-.1.1-.1.3 0 .5.4.7 1 1.3 1.7 1.7.2.1.4.1.5 0l.6-.5c.2-.2.4-.2.7-.1l1.5.7c.3.1.4.3.4.5v.5c0 .3 0 .5-.4.7-.4.2-1 .3-1.4.2-1.1-.2-2.3-.8-3.2-1.7-.9-.9-1.5-2-1.7-3.2-.1-.4 0-1 .2-1.4Z" />
     </svg>
   );
 }
@@ -190,22 +181,20 @@ export default function BusinessPage({
   params: Promise<{ slug: string }>;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [business, setBusiness] = useState<Business | null>(null);
   const [language, setLanguage] = useState<Language>("es");
   const [loading, setLoading] = useState(true);
 
   const [step, setStep] = useState<Step>("rating");
-  const [selectedRating, setSelectedRating] = useState<number | null>(
-    null
-  );
-  const [hoveredRating, setHoveredRating] = useState<number | null>(
-    null
-  );
+  const [selectedRating, setSelectedRating] = useState<number | null>(null);
+  const [hoveredRating, setHoveredRating] = useState<number | null>(null);
 
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
-  const [finishing, setFinishing] = useState(false);
+
+  const [scanEventId, setScanEventId] = useState<number | null>(null);
 
   useEffect(() => {
     async function cargarNegocio() {
@@ -224,17 +213,25 @@ export default function BusinessPage({
       }
 
       setBusiness(data[0]);
+
+      const scanParam = searchParams.get("scan");
+      const parsedScanId = scanParam ? Number(scanParam) : NaN;
+
+      if (Number.isInteger(parsedScanId) && parsedScanId > 0) {
+        setScanEventId(parsedScanId);
+      }
+
       setLanguage(detectarIdioma());
       setLoading(false);
     }
 
     cargarNegocio();
-  }, [params, router]);
+  }, [params, router, searchParams]);
 
   if (loading || !business) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f6f3ed]">
-        <p className="text-sm text-neutral-400">
+      <main className="flex min-h-screen items-center justify-center bg-[#f7f8f9]">
+        <p className="text-[10px] font-medium tracking-[0.24em] text-[#9aa0a6]">
           {translations[language].loading}
         </p>
       </main>
@@ -242,109 +239,80 @@ export default function BusinessPage({
   }
 
   const currentBusiness = business;
+  const businessId = currentBusiness.id;
   const t = translations[language];
 
   const iniciales = currentBusiness.name
     .split(" ")
     .slice(0, 2)
-    .map((palabra) => palabra[0])
+    .map((palabra: string) => palabra[0])
     .join("")
     .toUpperCase();
 
-  const ratingToShow = hoveredRating ?? selectedRating ?? 0;
-
-  async function guardarValoracion(
-    rating: number,
-    feedbackMessage: string | null = null
-  ) {
+  async function guardarRating(rating: number) {
     const { error } = await supabase.from("feedback").insert({
       rating,
-      business_id: currentBusiness.id,
-      message: feedbackMessage,
+      business_id: businessId,
+      message: null,
+      scan_event_id: scanEventId,
     });
 
     if (error) {
-      console.error("Error guardando valoración:", error);
+      console.error(error);
       return false;
     }
 
     return true;
   }
 
-  function seleccionarRating(rating: number) {
-    if (sending || finishing) {
-      return;
-    }
-
+  async function seleccionarRating(rating: number) {
     setSelectedRating(rating);
     setHoveredRating(null);
     setMessage("");
+
+    if (rating >= 4) {
+      const guardado = await guardarRating(rating);
+
+      if (!guardado) {
+        alert("No se pudo registrar la valoración.");
+        return;
+      }
+    }
+
     setStep("result");
   }
 
-  async function finalizarSinComentario() {
-    if (!selectedRating || finishing) {
-      return;
+  async function finalizarRating() {
+    if (!selectedRating) return;
+
+    if (selectedRating <= 3) {
+      const guardado = await guardarRating(selectedRating);
+
+      if (!guardado) {
+        alert("No se pudo registrar la valoración.");
+        return;
+      }
     }
 
-    setFinishing(true);
-
-    const guardado = await guardarValoracion(selectedRating);
-
-    if (!guardado) {
-      setFinishing(false);
-      alert("No se pudo registrar la valoración.");
-      return;
-    }
-
-    setFinishing(false);
-    setStep("sent");
-  }
-
-  async function compartirGoogle() {
-    if (
-      !selectedRating ||
-      !currentBusiness.google_url ||
-      finishing
-    ) {
-      return;
-    }
-
-    setFinishing(true);
-
-    const guardado = await guardarValoracion(selectedRating);
-
-    if (!guardado) {
-      setFinishing(false);
-      alert("No se pudo registrar la valoración.");
-      return;
-    }
-
-    window.open(
-      currentBusiness.google_url,
-      "_blank",
-      "noopener,noreferrer"
-    );
-
-    setFinishing(false);
     setStep("sent");
   }
 
   async function enviarFeedback() {
-    if (!selectedRating || !message.trim() || sending) {
-      return;
-    }
+    if (!selectedRating || !message.trim()) return;
 
     setSending(true);
 
-    const guardado = await guardarValoracion(
-      selectedRating,
-      message.trim()
-    );
+    const { error } = await supabase.from("feedback").insert({
+      message: message.trim(),
+      rating: selectedRating,
+      business_id: businessId,
+      scan_event_id: scanEventId,
+    });
 
-    if (!guardado) {
-      setSending(false);
+    if (error) {
+      console.error(error);
       alert("No se pudo enviar el comentario.");
+      setSending(false);
       return;
     }
 
@@ -356,347 +324,314 @@ export default function BusinessPage({
     setSelectedRating(null);
     setHoveredRating(null);
     setMessage("");
-    setSending(false);
-    setFinishing(false);
     setStep("rating");
   }
 
+  function irAFeedback() {
+    setStep("feedback");
+  }
+
+  function abrirGoogle() {
+    if (!currentBusiness.google_url) return;
+
+    window.open(
+      currentBusiness.google_url,
+      "_blank",
+      "noopener,noreferrer"
+    );
+  }
+
+  const ratingToShow = hoveredRating ?? selectedRating ?? 0;
+
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f6f3ed] text-[#171714]">
-
-      {/* FONDO AMBIENTAL */}
-      <div className="pointer-events-none fixed inset-0">
-        <div className="absolute left-1/2 top-[-220px] h-[520px] w-[720px] -translate-x-1/2 rounded-full bg-white/75 blur-3xl" />
-
-        <div className="absolute bottom-[-280px] right-[-180px] h-[500px] w-[500px] rounded-full bg-white/35 blur-3xl" />
-      </div>
-
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[1100px] flex-col px-6 sm:px-10 lg:px-14">
-
+    <main className="min-h-screen bg-[#f7f8f9] text-[#111315]">
+      <section className="mx-auto flex min-h-screen w-full max-w-[1280px] flex-col px-5 py-5 sm:px-8 sm:py-6 lg:px-10">
         {/* HEADER */}
-        <header className="flex items-center justify-between border-b border-neutral-900/[0.07] py-5 sm:py-6">
-
-          {/* NEGOCIO */}
+        <header className="flex items-center justify-between">
           <div className="flex min-w-0 items-center gap-3">
+            {currentBusiness.logo_url ? (
+              <img
+                src={currentBusiness.logo_url}
+                alt={`Logo de ${currentBusiness.name}`}
+                className="h-10 w-10 rounded-[10px] object-cover ring-1 ring-black/[0.08] sm:h-11 sm:w-11"
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-[#111315] text-[10px] font-semibold text-white sm:h-11 sm:w-11">
+                {iniciales}
+              </div>
+            )}
 
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden sm:h-12 sm:w-12">
-              {currentBusiness.logo_url ? (
-                <img
-                  src={currentBusiness.logo_url}
-                  alt={`Logo de ${currentBusiness.name}`}
-                  className="max-h-full max-w-full object-contain"
-                />
-              ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-300 bg-white text-[11px] font-semibold tracking-tight">
-                  {iniciales}
-                </div>
-              )}
-            </div>
-
-            <p className="truncate text-[16px] font-semibold tracking-[-0.025em] sm:text-[17px]">
+            <span className="truncate text-[13px] font-semibold tracking-[-0.015em] sm:text-[14px]">
               {currentBusiness.name}
-            </p>
+            </span>
           </div>
 
-          {/* IDIOMAS */}
-          <div className="ml-4 flex shrink-0 items-center gap-1 rounded-full border border-neutral-200/80 bg-white/60 p-1 backdrop-blur">
-            {(["es", "en", "pt"] as Language[]).map((lang) => (
-              <button
-                key={lang}
-                type="button"
-                onClick={() => setLanguage(lang)}
-                className={`rounded-full px-2.5 py-1.5 text-[9px] font-semibold tracking-[0.08em] transition sm:px-3 ${
-                  language === lang
-                    ? "bg-neutral-900 text-white"
-                    : "text-neutral-400 hover:text-neutral-800"
-                }`}
-              >
-                {lang.toUpperCase()}
-              </button>
+          <div className="flex items-center gap-2 text-[9px] font-semibold tracking-[0.12em]">
+            {(["es", "en", "pt"] as Language[]).map((lang, index) => (
+              <span key={lang} className="flex items-center">
+                {index > 0 && (
+                  <span className="mr-2 text-[#c9cdd1]">/</span>
+                )}
+
+                <button
+                  onClick={() => setLanguage(lang)}
+                  className={`transition ${
+                    language === lang
+                      ? "text-[#111315]"
+                      : "text-[#a4a9ae] hover:text-[#555b60]"
+                  }`}
+                >
+                  {lang.toUpperCase()}
+                </button>
+              </span>
             ))}
           </div>
         </header>
 
-        <div className="flex flex-1 flex-col">
+        <div className="mt-5 h-px bg-[#dfe2e4]" />
 
-          {/* =========================
-              RATING
-             ========================= */}
+        {/* MAIN */}
+        <div className="relative flex flex-1 items-center justify-center">
+          <div
+            className="pointer-events-none absolute left-1/2 top-1/2 h-[500px] w-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-60 blur-[90px]"
+            style={{
+              background:
+                "radial-gradient(circle, rgba(225,231,236,0.7) 0%, rgba(247,248,249,0) 70%)",
+            }}
+          />
+
           {step === "rating" && (
-            <section className="flex flex-1 flex-col items-center justify-center pb-10 pt-12 sm:pb-14 sm:pt-14">
+            <div className="relative w-full max-w-[760px] -translate-y-[3%] py-10 text-center sm:py-14">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.34em] text-[#9ca2a7]">
+                {t.experienceLabel}
+              </p>
 
-              <div className="w-full max-w-[760px] text-center">
-
-                <p className="mb-5 text-[10px] font-semibold uppercase tracking-[0.28em] text-neutral-400">
-                  {t.experience}
-                </p>
-
-                <h1 className="mx-auto max-w-[760px] text-[38px] font-semibold leading-[1.05] tracking-[-0.055em] sm:text-[52px] lg:text-[58px]">
-                  {t.question}
-                </h1>
-
-                <p className="mx-auto mt-5 max-w-[380px] text-[14px] leading-6 text-neutral-500 sm:text-[15px]">
-                  {t.subtitle}
-                </p>
-
-                {/* SEPARADOR */}
-                <div className="mx-auto mt-10 flex w-full max-w-[520px] items-center gap-5">
-                  <div className="h-px flex-1 bg-neutral-900/[0.08]" />
-                  <div className="h-1.5 w-1.5 rounded-full bg-neutral-300" />
-                  <div className="h-px flex-1 bg-neutral-900/[0.08]" />
-                </div>
-
-                {/* ESTRELLAS */}
-                <div
-                  className="mt-8 flex items-center justify-center gap-2 sm:mt-9 sm:gap-5"
-                  onMouseLeave={() => setHoveredRating(null)}
-                >
-                  {[1, 2, 3, 4, 5].map((rating) => {
-                    const active = rating <= ratingToShow;
-
-                    return (
-                      <button
-                        key={rating}
-                        type="button"
-                        aria-label={`${rating} estrellas`}
-                        onMouseEnter={() =>
-                          setHoveredRating(rating)
-                        }
-                        onFocus={() =>
-                          setHoveredRating(rating)
-                        }
-                        onClick={() =>
-                          seleccionarRating(rating)
-                        }
-                        className="flex h-[64px] w-[64px] items-center justify-center rounded-full transition-transform duration-200 hover:scale-110 active:scale-90 sm:h-[76px] sm:w-[76px]"
-                      >
-                        <StarIcon
-                          filled={active}
-                          className={`h-[43px] w-[43px] transition-all duration-200 sm:h-[49px] sm:w-[49px] ${
-                            active
-                              ? "text-neutral-950 drop-shadow-[0_5px_8px_rgba(0,0,0,0.08)]"
-                              : "text-neutral-300 group-hover:text-neutral-500"
-                          }`}
-                        />
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* =========================
-              RESULTADO
-             ========================= */}
-          {step === "result" && selectedRating !== null && (
-            <section className="flex flex-1 flex-col items-center justify-center pb-10 pt-12">
-
-              <div className="w-full max-w-[560px] text-center">
-
-                <div className="flex justify-center gap-1.5">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <StarIcon
-                      key={star}
-                      filled={star <= selectedRating}
-                      className={`h-7 w-7 sm:h-8 sm:w-8 ${
-                        star <= selectedRating
-                          ? "text-neutral-950"
-                          : "text-neutral-200"
-                      }`}
-                    />
-                  ))}
-                </div>
-
-                <h1 className="mt-8 text-[34px] font-semibold tracking-[-0.05em] sm:text-[44px]">
-                  {t.thanks}
-                </h1>
-
-                <p className="mt-4 text-[14px] text-neutral-500 sm:text-[15px]">
-                  {t.share}
-                </p>
-
-                <div className="mx-auto mt-9 flex w-full max-w-[390px] flex-col gap-3">
-
-                  {currentBusiness.google_url && (
-                    <button
-                      type="button"
-                      onClick={compartirGoogle}
-                      disabled={finishing}
-                      className="w-full rounded-full bg-neutral-950 px-6 py-4 text-[14px] font-semibold text-white shadow-[0_10px_30px_rgba(0,0,0,0.10)] transition hover:bg-neutral-800 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {finishing ? "..." : t.google}
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => setStep("feedback")}
-                    disabled={finishing}
-                    className="w-full rounded-full border border-neutral-300 bg-white/50 px-6 py-4 text-[14px] font-semibold text-neutral-900 transition hover:bg-white active:scale-[0.99] disabled:opacity-50"
-                  >
-                    {t.feedback}
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={finalizarSinComentario}
-                  disabled={finishing}
-                  className="mt-6 text-[13px] text-neutral-400 transition hover:text-neutral-800 disabled:opacity-50"
-                >
-                  {finishing ? "..." : t.notNow}
-                </button>
-              </div>
-            </section>
-          )}
-
-          {/* =========================
-              FEEDBACK
-             ========================= */}
-          {step === "feedback" && selectedRating !== null && (
-            <section className="flex flex-1 flex-col items-center justify-center pb-10 pt-12">
-
-              <div className="w-full max-w-[560px]">
-
-                <div className="text-center">
-
-                  <div className="flex justify-center gap-1.5">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <StarIcon
-                        key={star}
-                        filled={star <= selectedRating}
-                        className={`h-7 w-7 ${
-                          star <= selectedRating
-                            ? "text-neutral-950"
-                            : "text-neutral-200"
-                        }`}
-                      />
-                    ))}
-                  </div>
-
-                  <h1 className="mt-8 text-[34px] font-semibold tracking-[-0.05em] sm:text-[44px]">
-                    {t.feedbackTitle}
-                  </h1>
-
-                  <p className="mx-auto mt-4 max-w-[390px] text-[14px] leading-6 text-neutral-500">
-                    {t.feedbackText}
-                  </p>
-                </div>
-
-                <div className="mt-9">
-                  <textarea
-                    value={message}
-                    onChange={(e) =>
-                      setMessage(e.target.value)
-                    }
-                    placeholder={t.placeholder}
-                    maxLength={2000}
-                    className="min-h-[180px] w-full resize-none rounded-[24px] border border-neutral-200 bg-white/70 p-5 text-[14px] leading-6 outline-none shadow-[0_10px_35px_rgba(0,0,0,0.035)] transition placeholder:text-neutral-400 focus:border-neutral-400 focus:bg-white"
-                  />
-
-                  <div className="mt-2 text-right text-[10px] text-neutral-400">
-                    {message.length}/2000
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={enviarFeedback}
-                  disabled={!message.trim() || sending}
-                  className="mt-4 w-full rounded-full bg-neutral-950 px-6 py-4 text-[14px] font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-35"
-                >
-                  {sending ? "..." : t.send}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setStep("result")}
-                  disabled={sending}
-                  className="mt-4 block w-full text-center text-[13px] text-neutral-400 transition hover:text-neutral-800 disabled:opacity-50"
-                >
-                  {t.back}
-                </button>
-              </div>
-            </section>
-          )}
-
-          {/* =========================
-              FINAL
-             ========================= */}
-          {step === "sent" && (
-            <section className="flex flex-1 flex-col items-center justify-center pb-10 pt-12 text-center">
-
-              <div className="flex h-[76px] w-[76px] items-center justify-center rounded-full border border-neutral-300 bg-white shadow-[0_12px_35px_rgba(0,0,0,0.07)]">
-                <CheckIcon />
-              </div>
-
-              <h1 className="mt-8 text-[34px] font-semibold tracking-[-0.05em] sm:text-[44px]">
-                {t.sentTitle}
+              <h1 className="mx-auto mt-5 max-w-[700px] text-[34px] font-semibold leading-[1.04] tracking-[-0.055em] sm:text-[48px] lg:text-[54px]">
+                {t.question}
               </h1>
 
-              <p className="mt-4 max-w-[350px] text-[14px] leading-6 text-neutral-500">
+              <p className="mt-5 text-[13px] text-[#747b81] sm:text-[14px]">
+                {t.subtitle}
+              </p>
+
+              {/* ESTRELLAS */}
+              <div
+                className="mt-11 flex items-center justify-center gap-3 sm:mt-14 sm:gap-7"
+                onMouseLeave={() => setHoveredRating(null)}
+              >
+                {[1, 2, 3, 4, 5].map((rating) => {
+                  const active = rating <= ratingToShow;
+
+                  return (
+                    <button
+                      key={rating}
+                      type="button"
+                      aria-label={`${rating} estrellas`}
+                      onMouseEnter={() => setHoveredRating(rating)}
+                      onFocus={() => setHoveredRating(rating)}
+                      onClick={() => seleccionarRating(rating)}
+                      className="group flex h-14 w-10 items-center justify-center transition duration-200 hover:scale-[1.1] active:scale-90 sm:h-16 sm:w-12"
+                    >
+                      <StarIcon
+                        filled={active}
+                        className={`h-9 w-9 transition-all duration-200 sm:h-11 sm:w-11 ${
+                          active
+                            ? "text-[#111315] drop-shadow-[0_5px_10px_rgba(17,19,21,0.12)]"
+                            : "text-[#bfc4c8] group-hover:text-[#666d73]"
+                        }`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mx-auto mt-2 flex max-w-[440px] items-center justify-between px-1 text-[10px] font-medium text-[#9ba1a6] sm:text-[11px]">
+                <span>{t.terrible}</span>
+                <span>{t.excellent}</span>
+              </div>
+
+              <div className="mx-auto mt-10 flex max-w-[400px] items-center justify-center gap-4">
+                <span className="h-px flex-1 bg-[#dfe2e4]" />
+
+                <span className="whitespace-nowrap text-[9px] text-[#9da3a8]">
+                  {t.privateFeedback}
+                </span>
+
+                <span className="h-px flex-1 bg-[#dfe2e4]" />
+              </div>
+            </div>
+          )}
+
+          {/* RESULTADO */}
+          {step === "result" && selectedRating !== null && (
+            <div className="relative w-full max-w-[620px] py-12 text-center">
+              <div className="flex justify-center gap-3">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <StarIcon
+                    key={star}
+                    filled={star <= selectedRating}
+                    className={`h-9 w-9 ${
+                      star <= selectedRating
+                        ? "text-[#111315]"
+                        : "text-[#c8cdd1]"
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <h2 className="mt-8 text-[31px] font-semibold tracking-[-0.045em] sm:text-[40px]">
+                {t.ratingSelected}
+              </h2>
+
+              <p className="mx-auto mt-4 max-w-[460px] text-[13px] leading-6 text-[#747b81]">
+                {t.ratingPrivate}
+              </p>
+
+              {currentBusiness.google_url && (
+                <div className="mx-auto mt-9 max-w-[440px]">
+                  <p className="text-[13px] leading-5 text-[#747b81]">
+                    {t.shareText}
+                  </p>
+
+                  <button
+                    onClick={abrirGoogle}
+                    className="mt-5 w-full rounded-[12px] bg-[#111315] px-6 py-4 text-[13px] font-semibold text-white transition hover:bg-[#272b2f] active:scale-[0.99]"
+                  >
+                    {t.google}
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={irAFeedback}
+                className="mt-6 text-[12px] font-medium text-[#6d747a] underline decoration-[#c9cdd1] underline-offset-4 transition hover:text-[#111315]"
+              >
+                {t.feedbackOption}
+              </button>
+
+              <div>
+                <button
+                  onClick={finalizarRating}
+                  className="mt-6 text-[11px] text-[#a1a7ac] transition hover:text-[#555b60]"
+                >
+                  {t.notNow}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* FEEDBACK */}
+          {step === "feedback" && selectedRating !== null && (
+            <div className="relative w-full max-w-[610px] py-12 text-center">
+              <div className="flex justify-center gap-2">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <StarIcon
+                    key={star}
+                    filled={star <= selectedRating}
+                    className={`h-7 w-7 ${
+                      star <= selectedRating
+                        ? "text-[#111315]"
+                        : "text-[#c8cdd1]"
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <h2 className="mt-8 text-[30px] font-semibold tracking-[-0.045em] sm:text-[38px]">
+                {t.feedbackTitle}
+              </h2>
+
+              <p className="mx-auto mt-4 max-w-[480px] text-[13px] leading-6 text-[#747b81]">
+                {t.feedbackText}
+              </p>
+
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder={t.placeholder}
+                maxLength={2000}
+                className="mx-auto mt-8 block min-h-[150px] w-full resize-none rounded-[14px] border border-[#d8dcdf] bg-white p-5 text-[14px] leading-6 text-[#111315] outline-none transition placeholder:text-[#a5abb0] focus:border-[#92999f]"
+              />
+
+              <div className="mt-2 text-right text-[10px] text-[#a1a7ac]">
+                {message.length}/2000
+              </div>
+
+              <button
+                onClick={enviarFeedback}
+                disabled={!message.trim() || sending}
+                className="mt-4 w-full rounded-[12px] bg-[#111315] px-6 py-4 text-[13px] font-semibold text-white transition hover:bg-[#272b2f] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {sending ? "..." : t.send}
+              </button>
+
+              <button
+                onClick={() => setStep("result")}
+                className="mt-5 text-[11px] text-[#a1a7ac] transition hover:text-[#555b60]"
+              >
+                {t.back}
+              </button>
+            </div>
+          )}
+
+          {/* FINAL */}
+          {step === "sent" && (
+            <div className="relative w-full max-w-[610px] py-12 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#111315] text-lg text-white">
+                ✓
+              </div>
+
+              <h2 className="mt-8 text-[31px] font-semibold tracking-[-0.045em] sm:text-[40px]">
+                {t.sentTitle}
+              </h2>
+
+              <p className="mt-4 text-[13px] leading-6 text-[#747b81]">
                 {t.sentText}
               </p>
 
               <button
-                type="button"
                 onClick={volverInicio}
-                className="mt-9 rounded-full bg-neutral-950 px-9 py-4 text-[14px] font-semibold text-white transition hover:bg-neutral-800 active:scale-[0.99]"
+                className="mt-8 rounded-[12px] bg-[#111315] px-8 py-4 text-[13px] font-semibold text-white transition hover:bg-[#272b2f] active:scale-[0.99]"
               >
                 {t.finish}
               </button>
-            </section>
-          )}
-
-          {/* =========================
-              FOOTER
-             ========================= */}
-          {step === "rating" && (
-            <footer className="flex flex-col items-center justify-between gap-5 border-t border-neutral-900/[0.07] pb-6 pt-6 sm:flex-row">
-
-              <div className="flex items-center gap-3">
-
-                {currentBusiness.instagram_url && (
-                  <a
-                    href={currentBusiness.instagram_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white/45 px-4 py-2.5 text-[12px] font-medium text-neutral-500 transition hover:border-neutral-300 hover:bg-white hover:text-neutral-900"
-                  >
-                    <InstagramIcon />
-                    Instagram
-                  </a>
-                )}
-
-                {currentBusiness.whatsapp && (
-                  <a
-                    href={currentBusiness.whatsapp}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 rounded-full border border-neutral-200 bg-white/45 px-4 py-2.5 text-[12px] font-medium text-neutral-500 transition hover:border-neutral-300 hover:bg-white hover:text-neutral-900"
-                  >
-                    <WhatsAppIcon />
-                    WhatsApp
-                  </a>
-                )}
-              </div>
-
-              <span className="text-[9px] font-medium lowercase tracking-[0.2em] text-neutral-300">
-                guesttap
-              </span>
-            </footer>
-          )}
-
-          {step !== "rating" && (
-            <footer className="pb-6 pt-6 text-center">
-              <span className="text-[9px] font-medium lowercase tracking-[0.2em] text-neutral-300">
-                guesttap
-              </span>
-            </footer>
+            </div>
           )}
         </div>
-      </div>
+
+        {/* FOOTER */}
+        <footer className="flex items-center justify-between border-t border-[#dfe2e4] pt-5">
+          <div className="flex items-center gap-5">
+            {step === "rating" && currentBusiness.instagram_url && (
+              <a
+                href={currentBusiness.instagram_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-[10px] font-medium text-[#858c92] transition hover:text-[#111315] sm:text-[11px]"
+              >
+                <InstagramIcon className="h-3.5 w-3.5" />
+                Instagram
+              </a>
+            )}
+
+            {step === "rating" && currentBusiness.whatsapp && (
+              <a
+                href={currentBusiness.whatsapp}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-[10px] font-medium text-[#858c92] transition hover:text-[#111315] sm:text-[11px]"
+              >
+                <WhatsAppIcon className="h-3.5 w-3.5" />
+                WhatsApp
+              </a>
+            )}
+          </div>
+
+          <span className="text-[8px] font-semibold tracking-[0.25em] text-[#b5bbc0]">
+            GUESTTAP
+          </span>
+        </footer>
+      </section>
     </main>
   );
 }

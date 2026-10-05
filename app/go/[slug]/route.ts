@@ -24,10 +24,27 @@ export async function GET(
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  await supabase.rpc("registrar_scan", {
-    p_business_id: business.id,
-    p_source: "qr",
-  });
+  const { data: scanId, error: scanError } = await supabase.rpc(
+    "registrar_scan",
+    {
+      p_business_id: business.id,
+      p_source: "qr",
+    }
+  );
 
-  return NextResponse.redirect(`${PRODUCTION_URL}/${business.slug}`);
+  if (scanError || !scanId) {
+    console.error(scanError);
+
+    return NextResponse.redirect(
+      `${PRODUCTION_URL}/${business.slug}`
+    );
+  }
+
+  const publicUrl = new URL(
+    `${PRODUCTION_URL}/${business.slug}`
+  );
+
+  publicUrl.searchParams.set("scan", String(scanId));
+
+  return NextResponse.redirect(publicUrl);
 }
