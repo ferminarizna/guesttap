@@ -1,121 +1,169 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../lib/supabase";
 
-function FeedbackForm() {
-  const searchParams = useSearchParams();
+type Feedback = {
+  id: number;
+  created_at: string;
+  message: string;
+  rating: number;
+};
 
-  const rating = Number(searchParams.get("rating")) || 0;
-  const businessId = Number(searchParams.get("business")) || 0;
-
-  const [mensaje, setMensaje] = useState("");
-  const [enviado, setEnviado] = useState(false);
-
-  async function enviarFeedback() {
-    if (!mensaje.trim()) return;
-
-    if (!businessId) {
-      alert("No se encontró el establecimiento.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("feedback")
-      .insert({
-        message: mensaje,
-        rating: rating,
-        business_id: businessId,
-      });
-
-    if (error) {
-      console.error(error);
-      alert("No se pudo enviar el comentario.");
-      return;
-    }
-
-    setEnviado(true);
-  }
-
-  if (enviado) {
-    return (
-      <main className="min-h-screen bg-white flex items-center justify-center px-6">
-        <div className="w-full max-w-md text-center">
-          <div className="text-5xl mb-6">✓</div>
-
-          <h1 className="text-3xl font-semibold text-gray-900 mb-4">
-            Gracias por tu opinión
-          </h1>
-
-          <p className="text-gray-600">
-            Tu comentario fue enviado al establecimiento.
-          </p>
-        </div>
-      </main>
-    );
-  }
-
-  return (
-    <main className="min-h-screen bg-white px-6 py-12">
-      <div className="max-w-md mx-auto">
-        <div className="text-center mb-10">
-          <div className="text-4xl mb-4">💬</div>
-
-          <h1 className="text-3xl font-semibold text-gray-900 mb-3">
-            Queremos saber qué pasó
-          </h1>
-
-          <p className="text-gray-500">
-            Tu opinión nos ayuda a mejorar la experiencia.
-          </p>
-        </div>
-
-        <div className="bg-gray-50 rounded-2xl p-5">
-          <label
-            htmlFor="feedback"
-            className="block text-sm font-medium text-gray-700 mb-3"
-          >
-            ¿Qué podríamos mejorar?
-          </label>
-
-          <textarea
-            id="feedback"
-            value={mensaje}
-            onChange={(e) => setMensaje(e.target.value)}
-            placeholder="Contanos qué pasó..."
-            className="w-full min-h-40 rounded-xl border border-gray-200 bg-white p-4 text-gray-900 outline-none focus:ring-2 focus:ring-gray-300 resize-none"
-          />
-
-          <button
-            onClick={enviarFeedback}
-            disabled={!mensaje.trim()}
-            className="w-full mt-4 rounded-xl bg-black text-white py-4 font-medium disabled:opacity-40"
-          >
-            Enviar comentario
-          </button>
-        </div>
-
-        <p className="text-center text-xs text-gray-400 mt-8">
-          Powered by GuestTap
-        </p>
-      </div>
-    </main>
-  );
-}
+type Business = {
+  id: number;
+  name: string;
+};
 
 export default function FeedbackPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="min-h-screen bg-white flex items-center justify-center">
-          <p className="text-sm text-gray-500">
-            Cargando...
-          </p>
-        </main>
+  const params = useParams();
+  const router = useRouter();
+
+  const businessId = Number(params.businessId);
+
+  const [business, setBusiness] = useState<Business | null>(null);
+  const [feedback, setFeedback] = useState<Feedback[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function cargarDatos() {
+      if (!businessId) {
+        setError("ID de negocio inválido.");
+        setLoading(false);
+        return;
       }
-    >
-      <FeedbackForm />
-    </Suspense>
+
+      try {
+        setError("");
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+          setError(
+            "La sesión de administrador expiró. Volvé a iniciar sesión."
+          );
+          setLoading(false);
+          router.push("/admin-login");
+          return;
+        }
+
+        const response = await fetch(
+          `/api/admin/feedback/${businessId}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          console.error(
+            "Error cargando feedback:",
+            result
+          );
+
+          setError(
+            result.error ||
+              "No se pudo cargar el feedback."
+          );
+
+          setLoading(false);
+          return;
+        }
+
+        setBusiness(result.business || null);
+        setFeedback(result.feedback || []);
+      } catch (error) {
+        console.error(error);
+
+        setError(
+          "Ocurrió un error al cargar el feedback."
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    cargarDatos();
+  }, [businessId, router]);
+
+  return (
+    <main className="min-h-screen bg-neutral-50 px-6 py-10 text-neutral-900">
+      <div className="mx-auto max-w-4xl">
+        <button
+          onClick={() => router.push("/admin")}
+          className="mb-6 text-sm font-medium text-neutral-500 hover:text-black"
+        >
+          ← Volver al dashboard
+        </button>
+
+        {business && (
+          <div>
+            <h1 className="text-3xl font-semibold">
+              {business.name}
+            </h1>
+
+            <p className="mt-2 text-sm text-neutral-500">
+              Feedback recibido
+            </p>
+          </div>
+        )}
+
+        {error && (
+          <div className="mt-6 rounded-2xl bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-8">
+          {loading ? (
+            <div className="rounded-2xl bg-white p-8 text-center text-sm text-neutral-500">
+              Cargando feedback...
+            </div>
+          ) : feedback.length === 0 ? (
+            <div className="rounded-2xl bg-white p-8 text-center text-sm text-neutral-500 ring-1 ring-neutral-200">
+              Todavía no hay feedback para este negocio.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {feedback.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-neutral-200"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="text-lg">
+                      {"⭐".repeat(
+                        Math.max(
+                          1,
+                          Math.min(5, item.rating)
+                        )
+                      )}
+                    </div>
+
+                    <p className="text-xs text-neutral-400">
+                      {new Date(
+                        item.created_at
+                      ).toLocaleDateString("es-AR")}
+                    </p>
+                  </div>
+
+                  <p className="mt-4 text-sm leading-6 text-neutral-700">
+                    {item.message}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
   );
 }

@@ -14,6 +14,7 @@ export default function RecuperarPage() {
 
   async function enviar() {
     setError("");
+    setSent(false);
 
     if (!email.trim()) {
       setError("Ingresá tu email.");
@@ -22,21 +23,32 @@ export default function RecuperarPage() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(
-      email.trim(),
-      {
-        redirectTo: REDIRECT_URL,
-      }
-    );
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim(),
+        {
+          redirectTo: REDIRECT_URL,
+        }
+      );
 
-    if (error) {
-      console.error(error);
-      setError("No se pudo enviar el enlace.");
-      setLoading(false);
-      return;
+      if (error) {
+        console.error("ERROR RESET PASSWORD:", error);
+        setError(error.message);
+        setLoading(false);
+        return;
+      }
+
+      setSent(true);
+    } catch (err) {
+      console.error("ERROR INESPERADO:", err);
+
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Ocurrió un error inesperado.");
+      }
     }
 
-    setSent(true);
     setLoading(false);
   }
 
@@ -87,9 +99,15 @@ export default function RecuperarPage() {
             />
 
             {error && (
-              <p className="mt-3 text-sm text-red-600">
-                {error}
-              </p>
+              <div className="mt-3 rounded-2xl bg-red-50 p-4">
+                <p className="text-sm font-medium text-red-700">
+                  Error:
+                </p>
+
+                <p className="mt-1 break-words text-sm leading-5 text-red-600">
+                  {error}
+                </p>
+              </div>
             )}
 
             <button

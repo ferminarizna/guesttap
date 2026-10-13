@@ -15,65 +15,110 @@ export default function ActivarCuentaPage() {
 
   useEffect(() => {
     let mounted = true;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
 
     async function comprobarSesion() {
-      // Supabase puede devolver errores directamente en el hash
-      const hash = window.location.hash;
-
-      if (hash.includes("error=")) {
+      try {
+        const hash = window.location.hash;
         const params = new URLSearchParams(hash.substring(1));
-        const errorCode = params.get("error_code");
 
-        if (errorCode === "otp_expired") {
-          setError(
-            "El enlace de invitación o recuperación venció. Necesitamos enviar uno nuevo."
-          );
-        } else {
-          setError("El enlace de acceso no es válido.");
+        if (params.has("error")) {
+          const description = params.get("error_description");
+          const errorCode = params.get("error_code");
+
+          if (!mounted) return;
+
+          if (errorCode === "otp_expired") {
+            setError(
+              "El enlace venció o ya fue utilizado. Solicitá uno nuevo."
+            );
+          } else {
+            setError(
+              description
+                ? decodeURIComponent(description.replace(/\+/g, " "))
+                : "El enlace no es válido. Solicitá uno nuevo."
+            );
+          }
+
+          setLoading(false);
+          return;
         }
 
-        setLoading(false);
-        return;
-      }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!mounted) return;
-
-      if (session) {
-        setLoading(false);
-        return;
-      }
-
-      // Esperamos a que Supabase procese el enlace de autenticación.
-      const timeout = setTimeout(async () => {
         const {
-          data: { session: currentSession },
+          data: { session },
+          error: sessionError,
         } = await supabase.auth.getSession();
 
         if (!mounted) return;
 
-        if (currentSession) {
+        if (sessionError) {
+          console.error("Error al comprobar la sesión:", sessionError);
+          setError(sessionError.message);
           setLoading(false);
-        } else {
-          setError("No se pudo validar el enlace de acceso.");
-          setLoading(false);
+          return;
         }
-      }, 1000);
 
-      return () => clearTimeout(timeout);
+        if (session) {
+          setLoading(false);
+          return;
+        }
+
+        timeout = setTimeout(async () => {
+          try {
+            const {
+              data: { session: currentSession },
+              error: currentSessionError,
+            } = await supabase.auth.getSession();
+
+            if (!mounted) return;
+
+            if (currentSessionError) {
+              setError(currentSessionError.message);
+            } else if (!currentSession) {
+              setError(
+                "No encontramos una sesión válida. Solicitá un nuevo enlace y abrilo en el mismo navegador donde lo pediste."
+              );
+            }
+
+            setLoading(false);
+          } catch (err) {
+            if (!mounted) return;
+
+            console.error("Error comprobando el acceso:", err);
+            setError(
+              err instanceof Error
+                ? err.message
+                : "No se pudo comprobar la sesión."
+            );
+            setLoading(false);
+          }
+        }, 1500);
+      } catch (err) {
+        if (!mounted) return;
+
+        console.error("Error al validar el enlace:", err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "No se pudo validar el enlace."
+        );
+        setLoading(false);
+      }
     }
 
     comprobarSesion();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
-      if (session) {
+      if (
+        session &&
+        (event === "PASSWORD_RECOVERY" ||
+          event === "SIGNED_IN" ||
+          event === "INITIAL_SESSION")
+      ) {
         setLoading(false);
         setError("");
       }
@@ -81,11 +126,18 @@ export default function ActivarCuentaPage() {
 
     return () => {
       mounted = false;
+
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+
       subscription.unsubscribe();
     };
   }, []);
 
   async function crearPassword() {
+    if (saving) return;
+
     setError("");
 
     if (password.length < 6) {
@@ -100,18 +152,49 @@ export default function ActivarCuentaPage() {
 
     setSaving(true);
 
-    const { error } = await supabase.auth.updateUser({
-      password,
-    });
+    try {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
 
-    if (error) {
-      console.error(error);
-      setError("No se pudo establecer la contraseña.");
+      if (sessionError) {
+        throw sessionError;
+      }
+
+      if (!session) {
+        throw new Error(
+          "Tu sesión de recuperación venció o no se pudo validar. Solicitá un enlace nuevo."
+        );
+      }
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
+      });
+
+      if (updateError) {
+        console.error("Error real al cambiar la contraseña:", updateError);
+        throw updateError;
+      }
+
+      const { error: signOutError } = await supabase.auth.signOut();
+
+      if (signOutError) {
+        console.warn("No se pudo cerrar la sesión anterior:", signOutError);
+      }
+
+      router.replace("/panel-login");
+    } catch (err) {
+      console.error("Error al establecer la contraseña:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Ocurrió un error inesperado al establecer la contraseña."
+      );
+    } finally {
       setSaving(false);
-      return;
     }
-
-    router.replace("/panel");
   }
 
   if (loading) {
@@ -124,7 +207,7 @@ export default function ActivarCuentaPage() {
     );
   }
 
-  if (error) {
+  if (error && !password && !confirmPassword) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f7f7f5] px-5">
         <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-sm ring-1 ring-black/5">
@@ -133,12 +216,19 @@ export default function ActivarCuentaPage() {
           </div>
 
           <h1 className="mt-6 text-2xl font-semibold">
-            No se pudo activar la cuenta
+            No se pudo validar el acceso
           </h1>
 
-          <p className="mt-3 text-sm leading-6 text-neutral-500">
+          <p className="mt-3 break-words text-sm leading-6 text-red-600">
             {error}
           </p>
+
+          <a
+            href="/recuperar"
+            className="mt-6 inline-flex w-full justify-center rounded-2xl bg-black px-5 py-4 text-sm font-semibold text-white transition hover:bg-neutral-800"
+          >
+            Solicitar otro enlace
+          </a>
         </div>
       </main>
     );
@@ -157,57 +247,77 @@ export default function ActivarCuentaPage() {
           </p>
 
           <h1 className="mt-3 text-2xl font-semibold tracking-tight">
-            Activá tu cuenta
+            Crear contraseña
           </h1>
 
           <p className="mt-2 text-sm leading-6 text-neutral-500">
-            Creá una contraseña para acceder al panel de tu negocio.
+            Elegí una contraseña para acceder al panel de tu negocio.
           </p>
         </div>
 
-        <div className="mt-8 space-y-4">
+        <form
+          className="mt-8 space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            crearPassword();
+          }}
+        >
           <div>
-            <label className="text-sm font-medium text-neutral-700">
-              Contraseña
+            <label
+              htmlFor="password"
+              className="text-sm font-medium text-neutral-700"
+            >
+              Contraseña nueva
             </label>
 
             <input
+              id="password"
               type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Mínimo 6 caracteres"
+              required
+              minLength={6}
               className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-400"
             />
           </div>
 
           <div>
-            <label className="text-sm font-medium text-neutral-700">
+            <label
+              htmlFor="confirm-password"
+              className="text-sm font-medium text-neutral-700"
+            >
               Repetir contraseña
             </label>
 
             <input
+              id="confirm-password"
               type="password"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Repetí tu contraseña"
+              required
+              minLength={6}
               className="mt-2 w-full rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-400"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600">
-              {error}
-            </p>
+            <div className="rounded-xl border border-red-200 bg-red-50 p-3">
+              <p className="break-words text-sm text-red-700">{error}</p>
+            </div>
           )}
 
           <button
-            onClick={crearPassword}
+            type="submit"
             disabled={saving}
             className="w-full rounded-2xl bg-black px-5 py-4 text-sm font-semibold text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {saving ? "Guardando..." : "Crear contraseña"}
+            {saving ? "Guardando..." : "Guardar contraseña"}
           </button>
-        </div>
+        </form>
       </div>
     </main>
   );
