@@ -92,7 +92,7 @@ const translations = {
     sentTitle: "Obrigado pela sua opinião",
     sentText: "Seu comentário foi enviado ao estabelecimento.",
     back: "Voltar",
-    loading: "Cargando...",
+    loading: "Carregando...",
     finish: "Finalizar",
     notNow: "Agora não",
   },
@@ -302,19 +302,15 @@ export default function BusinessPage({
 
     setSending(true);
 
-    const { data: savedFeedback, error } = await supabase
-      .from("feedback")
-      .insert({
-        message: message.trim(),
-        rating: selectedRating,
-        business_id: businessId,
-        scan_event_id: scanEventId,
-      })
-      .select("id")
-      .single();
+    const { error } = await supabase.from("feedback").insert({
+      message: message.trim(),
+      rating: selectedRating,
+      business_id: businessId,
+      scan_event_id: scanEventId,
+    });
 
-    if (error || !savedFeedback) {
-      console.error(error);
+    if (error) {
+      console.error("GuestTap feedback error:", error);
       alert("No se pudo enviar el comentario.");
       setSending(false);
       return;
@@ -329,20 +325,20 @@ export default function BusinessPage({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            feedbackId: savedFeedback.id,
+            businessId,
           }),
         }
       );
 
       if (!analysisResponse.ok) {
         console.error(
-          "No se pudo analizar el feedback:",
+          "GuestTap analysis error:",
           await analysisResponse.text()
         );
       }
     } catch (analysisError) {
       console.error(
-        "Error conectando con el análisis de GuestTap:",
+        "GuestTap analysis request error:",
         analysisError
       );
     }
