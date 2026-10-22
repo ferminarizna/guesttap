@@ -62,6 +62,11 @@ export async function POST(request: NextRequest) {
         ? body.name.trim()
         : "";
 
+    const businessType =
+      typeof body.business_type === "string"
+        ? body.business_type.trim()
+        : "other";
+
     const googleUrl =
       typeof body.google_url === "string"
         ? body.google_url.trim()
@@ -132,13 +137,14 @@ export async function POST(request: NextRequest) {
         .insert({
           name,
           slug,
+          business_type: businessType,
           google_url: googleUrl || null,
           instagram_url: instagramUrl || null,
           whatsapp: convertirWhatsApp(whatsapp),
           logo_url: logoUrl || null,
         })
         .select(
-          "id, name, slug, google_url, instagram_url, whatsapp, logo_url"
+          "id, name, slug, business_type, google_url, instagram_url, whatsapp, logo_url"
         )
         .single();
 

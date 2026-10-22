@@ -108,6 +108,11 @@ export async function PUT(request: NextRequest) {
         ? body.name.trim()
         : "";
 
+    const businessType =
+      typeof body.business_type === "string"
+        ? body.business_type.trim()
+        : "other";
+
     const googleUrl =
       typeof body.google_url === "string"
         ? body.google_url.trim()
@@ -143,6 +148,7 @@ export async function PUT(request: NextRequest) {
         .from("businesses")
         .update({
           name,
+          business_type: businessType,
           google_url: googleUrl || null,
           instagram_url: instagramUrl || null,
           whatsapp: convertirWhatsApp(whatsapp),
@@ -150,7 +156,7 @@ export async function PUT(request: NextRequest) {
         })
         .eq("id", businessUser.business_id)
         .select(
-          "id, name, slug, google_url, instagram_url, whatsapp, logo_url"
+          "id, name, slug, business_type, google_url, instagram_url, whatsapp, logo_url"
         )
         .single();
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../lib/supabase";
 
 type Business = {
@@ -16,11 +16,21 @@ type Feedback = {
   created_at: string;
 };
 
+type RatingFilter = "all" | "5" | "4" | "3" | "2" | "1";
+type ViewFilter = "all" | "comments" | "ratings";
+
 function Icon({
   name,
   size = 20,
 }: {
-  name: "arrow" | "message" | "star" | "activity";
+  name:
+    | "arrow"
+    | "message"
+    | "star"
+    | "activity"
+    | "search"
+    | "filter"
+    | "close";
   size?: number;
 }) {
   const common = {
@@ -55,6 +65,34 @@ function Icon({
     return (
       <svg {...common}>
         <path d="M3 12h4l2-7 4 14 2-7h6" />
+      </svg>
+    );
+  }
+
+  if (name === "search") {
+    return (
+      <svg {...common}>
+        <circle cx="11" cy="11" r="6.5" />
+        <path d="m16 16 4 4" />
+      </svg>
+    );
+  }
+
+  if (name === "filter") {
+    return (
+      <svg {...common}>
+        <path d="M4 6h16" />
+        <path d="M7 12h10" />
+        <path d="M10 18h4" />
+      </svg>
+    );
+  }
+
+  if (name === "close") {
+    return (
+      <svg {...common}>
+        <path d="m7 7 10 10" />
+        <path d="m17 7-10 10" />
       </svg>
     );
   }
@@ -97,11 +135,26 @@ function formatDate(date: string) {
   });
 }
 
+function formatDateTime(date: string) {
+  return new Date(date).toLocaleString("es-AR", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export default function FeedbackPage() {
   const [business, setBusiness] = useState<Business | null>(null);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [ratingFilter, setRatingFilter] =
+    useState<RatingFilter>("all");
+  const [viewFilter, setViewFilter] =
+    useState<ViewFilter>("all");
 
   useEffect(() => {
     cargarFeedback();
@@ -170,6 +223,16 @@ export default function FeedbackPage() {
     setLoading(false);
   }
 
+  const privados = useMemo(
+    () =>
+      feedback.filter(
+        (item) =>
+          item.message &&
+          item.message.trim() !== ""
+      ),
+    [feedback]
+  );
+
   const promedio =
     feedback.length > 0
       ? (
@@ -180,18 +243,118 @@ export default function FeedbackPage() {
         ).toFixed(1)
       : "0.0";
 
-  const privados = feedback.filter(
-    (item) => item.message && item.message.trim() !== ""
-  );
-
   const positivas =
     feedback.length > 0
       ? Math.round(
-          (feedback.filter((item) => item.rating >= 4).length /
+          (feedback.filter(
+            (item) => item.rating >= 4
+          ).length /
             feedback.length) *
             100
         )
       : 0;
+
+  const atencion =
+    feedback.length > 0
+      ? Math.round(
+          (feedback.filter(
+            (item) => item.rating <= 2
+          ).length /
+            feedback.length) *
+            100
+        )
+      : 0;
+
+  const neutras =
+    feedback.length > 0
+      ? Math.round(
+          (feedback.filter(
+            (item) => item.rating === 3
+          ).length /
+            feedback.length) *
+            100
+        )
+      : 0;
+
+  const ratingCounts = useMemo(() => {
+    return {
+      5: feedback.filter((item) => item.rating === 5).length,
+      4: feedback.filter((item) => item.rating === 4).length,
+      3: feedback.filter((item) => item.rating === 3).length,
+      2: feedback.filter((item) => item.rating === 2).length,
+      1: feedback.filter((item) => item.rating === 1).length,
+    };
+  }, [feedback]);
+
+  const filteredFeedback = useMemo(() => {
+    const normalizedSearch = search
+      .trim()
+      .toLowerCase();
+
+    return feedback.filter((item) => {
+      const hasComment =
+        Boolean(item.message) &&
+        item.message!.trim() !== "";
+
+      if (
+        viewFilter === "comments" &&
+        !hasComment
+      ) {
+        return false;
+      }
+
+      if (
+        viewFilter === "ratings" &&
+        hasComment
+      ) {
+        return false;
+      }
+
+      if (
+        ratingFilter !== "all" &&
+        item.rating !== Number(ratingFilter)
+      ) {
+        return false;
+      }
+
+      if (normalizedSearch) {
+        const message =
+          item.message?.toLowerCase() || "";
+
+        const date = formatDate(
+          item.created_at
+        ).toLowerCase();
+
+        if (
+          !message.includes(normalizedSearch) &&
+          !date.includes(normalizedSearch) &&
+          !String(item.rating).includes(
+            normalizedSearch
+          )
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [
+    feedback,
+    search,
+    ratingFilter,
+    viewFilter,
+  ]);
+
+  function limpiarFiltros() {
+    setSearch("");
+    setRatingFilter("all");
+    setViewFilter("all");
+  }
+
+  const hayFiltros =
+    search.trim() !== "" ||
+    ratingFilter !== "all" ||
+    viewFilter !== "all";
 
   if (loading) {
     return (
@@ -202,8 +365,8 @@ export default function FeedbackPage() {
 
             <div className="mt-7 h-28 rounded-[24px] bg-neutral-100" />
 
-            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {[1, 2, 3].map((item) => (
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[1, 2, 3, 4].map((item) => (
                 <div
                   key={item}
                   className="h-28 rounded-2xl bg-neutral-100"
@@ -211,7 +374,8 @@ export default function FeedbackPage() {
               ))}
             </div>
 
-            <div className="mt-5 h-80 rounded-[24px] bg-neutral-100" />
+            <div className="mt-5 h-24 rounded-[24px] bg-neutral-100" />
+            <div className="mt-5 h-96 rounded-[24px] bg-neutral-100" />
           </div>
         </div>
       </main>
@@ -252,14 +416,11 @@ export default function FeedbackPage() {
 
   return (
     <main className="min-h-screen bg-[#f6f6f4] text-neutral-950">
-
       {/* HEADER */}
 
       <header className="border-b border-neutral-200 bg-white">
         <div className="mx-auto max-w-[1100px] px-4 sm:px-7 lg:px-8">
-
           <div className="flex items-center justify-between py-4 sm:py-5">
-
             <div>
               <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-400 sm:text-[10px]">
                 GuestTap
@@ -284,13 +445,11 @@ export default function FeedbackPage() {
 
               <Icon name="arrow" size={14} />
             </a>
-
           </div>
 
           {/* NAVEGACIÓN */}
 
           <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-3">
-
             <a
               href="/panel"
               className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950"
@@ -319,22 +478,17 @@ export default function FeedbackPage() {
             >
               Configuración
             </a>
-
           </nav>
-
         </div>
       </header>
 
       {/* CONTENIDO */}
 
       <div className="px-4 py-6 sm:px-7 sm:py-9 lg:px-8">
-
         <div className="mx-auto max-w-[1100px]">
-
           {/* INTRO */}
 
           <section>
-
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">
               {business.name}
             </p>
@@ -344,27 +498,24 @@ export default function FeedbackPage() {
             </h2>
 
             <p className="mt-2 max-w-xl text-xs leading-5 text-neutral-500 sm:text-sm sm:leading-6">
-              Revisá las opiniones que tus clientes dejan a través de GuestTap.
+              Revisá las opiniones que tus clientes dejan
+              a través de GuestTap y encontrá rápidamente
+              qué merece atención.
             </p>
-
           </section>
 
           {/* RESUMEN */}
 
           <section className="mt-6 overflow-hidden rounded-[24px] bg-[#111111] text-white sm:mt-8">
-
             <div className="grid sm:grid-cols-[1.1fr_0.9fr]">
-
               {/* PROMEDIO */}
 
               <div className="p-5 sm:p-7">
-
                 <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/35 sm:text-[10px]">
-                  Resumen
+                  Experiencia
                 </p>
 
                 <div className="mt-5 flex items-end gap-4">
-
                   <div>
                     <p className="text-[52px] font-semibold leading-none tracking-[-0.07em] sm:text-6xl">
                       {promedio}
@@ -376,7 +527,6 @@ export default function FeedbackPage() {
                   </div>
 
                   <div className="pb-1">
-
                     <div className="text-lg tracking-[2px]">
                       <span className="text-white">
                         {"★".repeat(
@@ -384,7 +534,9 @@ export default function FeedbackPage() {
                             5,
                             Math.max(
                               0,
-                              Math.round(Number(promedio))
+                              Math.round(
+                                Number(promedio)
+                              )
                             )
                           )
                         )}
@@ -397,7 +549,9 @@ export default function FeedbackPage() {
                               5,
                               Math.max(
                                 0,
-                                Math.round(Number(promedio))
+                                Math.round(
+                                  Number(promedio)
+                                )
                               )
                             )
                         )}
@@ -410,169 +564,433 @@ export default function FeedbackPage() {
                         ? "valoración"
                         : "valoraciones"}
                     </p>
-
                   </div>
-
                 </div>
-
               </div>
 
               {/* DATOS */}
 
-              <div className="grid grid-cols-2 border-t border-white/10 sm:border-l sm:border-t-0">
-
-                <div className="border-r border-white/10 p-5 sm:p-7">
-
-                  <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
+              <div className="grid grid-cols-3 border-t border-white/10 sm:border-l sm:border-t-0">
+                <div className="border-r border-white/10 p-4 sm:p-6">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
                     Positivas
                   </p>
 
-                  <p className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+                  <p className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
                     {positivas}%
                   </p>
 
-                  <p className="mt-1 text-[10px] text-white/40 sm:text-xs">
+                  <p className="mt-1 text-[9px] text-white/40 sm:text-xs">
                     4 y 5 estrellas
                   </p>
-
                 </div>
 
-                <div className="p-5 sm:p-7">
+                <div className="border-r border-white/10 p-4 sm:p-6">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
+                    Atención
+                  </p>
 
-                  <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
+                  <p className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
+                    {atencion}%
+                  </p>
+
+                  <p className="mt-1 text-[9px] text-white/40 sm:text-xs">
+                    1 y 2 estrellas
+                  </p>
+                </div>
+
+                <div className="p-4 sm:p-6">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
                     Comentarios
                   </p>
 
-                  <p className="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl">
+                  <p className="mt-4 text-2xl font-semibold tracking-tight sm:text-3xl">
                     {privados.length}
                   </p>
 
-                  <p className="mt-1 text-[10px] text-white/40 sm:text-xs">
-                    feedback privado
+                  <p className="mt-1 text-[9px] text-white/40 sm:text-xs">
+                    respuestas escritas
                   </p>
-
                 </div>
+              </div>
+            </div>
+          </section>
 
+          {/* DISTRIBUCIÓN */}
+
+          <section className="mt-5 rounded-[24px] border border-neutral-200 bg-white p-5 sm:p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neutral-400">
+                  Distribución
+                </p>
+
+                <h3 className="mt-1 text-base font-semibold tracking-tight sm:text-lg">
+                  ¿Cómo se están repartiendo las valoraciones?
+                </h3>
               </div>
 
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100">
+                <Icon name="star" size={16} />
+              </div>
             </div>
 
+            <div className="mt-5 space-y-2.5">
+              {[5, 4, 3, 2, 1].map((rating) => {
+                const count =
+                  ratingCounts[
+                    rating as keyof typeof ratingCounts
+                  ];
+
+                const percentage =
+                  feedback.length > 0
+                    ? Math.round(
+                        (count / feedback.length) * 100
+                      )
+                    : 0;
+
+                return (
+                  <button
+                    key={rating}
+                    type="button"
+                    onClick={() =>
+                      setRatingFilter(
+                        String(rating) as RatingFilter
+                      )
+                    }
+                    className="group flex w-full items-center gap-3 text-left"
+                  >
+                    <span className="w-12 shrink-0 text-[11px] font-medium text-neutral-600">
+                      {rating} estrellas
+                    </span>
+
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-neutral-100">
+                      <div
+                        className="h-full rounded-full bg-neutral-900 transition-all"
+                        style={{
+                          width: `${percentage}%`,
+                        }}
+                      />
+                    </div>
+
+                    <span className="w-8 shrink-0 text-right text-[10px] text-neutral-400">
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-2 border-t border-neutral-100 pt-5 sm:grid-cols-3">
+              <div className="rounded-xl bg-[#f7f7f5] p-3">
+                <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-neutral-400">
+                  Positivas
+                </p>
+
+                <p className="mt-1.5 text-sm font-semibold">
+                  {positivas}%
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-[#f7f7f5] p-3">
+                <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-neutral-400">
+                  Neutras
+                </p>
+
+                <p className="mt-1.5 text-sm font-semibold">
+                  {neutras}%
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-[#f7f7f5] p-3">
+                <p className="text-[8px] font-bold uppercase tracking-[0.15em] text-neutral-400">
+                  Atención
+                </p>
+
+                <p className="mt-1.5 text-sm font-semibold">
+                  {atencion}%
+                </p>
+              </div>
+            </div>
           </section>
 
           {/* LISTADO */}
 
           <section className="mt-5 overflow-hidden rounded-[24px] border border-neutral-200 bg-white">
-
             <div className="border-b border-neutral-200 px-5 py-5 sm:px-6">
-
-              <div className="flex items-center justify-between gap-4">
-
+              <div className="flex items-start justify-between gap-4">
                 <div>
                   <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-neutral-400 sm:text-[10px]">
-                    Feedback privado
+                    Actividad de clientes
                   </p>
 
                   <h3 className="mt-1 text-base font-semibold tracking-tight sm:text-lg">
-                    Comentarios de clientes
+                    Valoraciones y comentarios
                   </h3>
                 </div>
 
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100">
-                  <Icon name="message" size={16} />
+                  <Icon name="activity" size={16} />
                 </div>
-
               </div>
 
               <p className="mt-2 text-[11px] leading-5 text-neutral-500 sm:text-xs">
-                Estos comentarios son privados y solo están disponibles para tu negocio.
+                Filtrá las respuestas para encontrar rápidamente
+                lo que querés revisar.
               </p>
 
+              {/* BUSCADOR */}
+
+              <div className="mt-5">
+                <div className="relative">
+                  <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400">
+                    <Icon name="search" size={16} />
+                  </div>
+
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(event) =>
+                      setSearch(event.target.value)
+                    }
+                    placeholder="Buscar en comentarios..."
+                    className="w-full rounded-xl border border-neutral-200 bg-[#fafaf9] py-3 pl-10 pr-10 text-xs text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-neutral-400 focus:bg-white"
+                  />
+
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 transition hover:text-neutral-900"
+                      aria-label="Limpiar búsqueda"
+                    >
+                      <Icon name="close" size={15} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* FILTROS */}
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setViewFilter("all")
+                  }
+                  className={
+                    viewFilter === "all"
+                      ? "rounded-xl bg-black px-3 py-2 text-[10px] font-semibold text-white"
+                      : "rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[10px] font-medium text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900"
+                  }
+                >
+                  Todas
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setViewFilter("comments")
+                  }
+                  className={
+                    viewFilter === "comments"
+                      ? "rounded-xl bg-black px-3 py-2 text-[10px] font-semibold text-white"
+                      : "rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[10px] font-medium text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900"
+                  }
+                >
+                  Con comentario
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setViewFilter("ratings")
+                  }
+                  className={
+                    viewFilter === "ratings"
+                      ? "rounded-xl bg-black px-3 py-2 text-[10px] font-semibold text-white"
+                      : "rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[10px] font-medium text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900"
+                  }
+                >
+                  Solo valoración
+                </button>
+
+                <div className="hidden h-8 w-px bg-neutral-200 sm:block" />
+
+                {[5, 4, 3, 2, 1].map((rating) => (
+                  <button
+                    key={rating}
+                    type="button"
+                    onClick={() =>
+                      setRatingFilter(
+                        String(rating) as RatingFilter
+                      )
+                    }
+                    className={
+                      ratingFilter === String(rating)
+                        ? "rounded-xl bg-neutral-900 px-3 py-2 text-[10px] font-semibold text-white"
+                        : "rounded-xl border border-neutral-200 bg-white px-3 py-2 text-[10px] font-medium text-neutral-500 transition hover:bg-neutral-50 hover:text-neutral-900"
+                    }
+                  >
+                    {rating} ★
+                  </button>
+                ))}
+
+                {hayFiltros && (
+                  <button
+                    type="button"
+                    onClick={limpiarFiltros}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[10px] font-semibold text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
+                  >
+                    <Icon name="close" size={13} />
+                    Limpiar
+                  </button>
+                )}
+              </div>
             </div>
 
-            {privados.length === 0 ? (
-              <div className="px-5 py-14 text-center sm:px-6 sm:py-16">
+            {/* RESULTADOS */}
 
+            <div className="border-b border-neutral-100 bg-[#fafaf9] px-5 py-3 sm:px-6">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-[10px] font-medium text-neutral-500">
+                  {filteredFeedback.length}{" "}
+                  {filteredFeedback.length === 1
+                    ? "resultado"
+                    : "resultados"}
+                </p>
+
+                {hayFiltros && (
+                  <p className="text-[10px] text-neutral-400">
+                    Filtros activos
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {filteredFeedback.length === 0 ? (
+              <div className="px-5 py-14 text-center sm:px-6 sm:py-16">
                 <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-neutral-100">
-                  <Icon name="message" size={19} />
+                  <Icon name="filter" size={19} />
                 </div>
 
                 <p className="mt-4 text-sm font-semibold">
-                  Todavía no hay comentarios
+                  No encontramos resultados
                 </p>
 
                 <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-neutral-500">
-                  Cuando un cliente deje un comentario privado desde GuestTap, aparecerá acá.
+                  Probá cambiando los filtros o limpiando
+                  la búsqueda.
                 </p>
 
+                {hayFiltros && (
+                  <button
+                    type="button"
+                    onClick={limpiarFiltros}
+                    className="mt-5 rounded-xl bg-black px-4 py-2.5 text-xs font-semibold text-white"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
               </div>
             ) : (
               <div>
+                {filteredFeedback.map((item) => {
+                  const hasComment =
+                    Boolean(item.message) &&
+                    item.message!.trim() !== "";
 
-                {privados.map((item) => (
-                  <article
-                    key={item.id}
-                    className="border-b border-neutral-100 px-5 py-5 last:border-b-0 sm:px-6 sm:py-6"
-                  >
+                  const isAttention =
+                    item.rating <= 2;
 
-                    <div className="flex gap-3 sm:gap-4">
+                  return (
+                    <article
+                      key={item.id}
+                      className="border-b border-neutral-100 px-5 py-5 last:border-b-0 sm:px-6 sm:py-6"
+                    >
+                      <div className="flex gap-3 sm:gap-4">
+                        {/* RATING */}
 
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-[10px] font-semibold sm:h-11 sm:w-11 sm:text-xs">
-                        {item.rating}/5
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-
-                        <div className="flex flex-wrap items-center gap-2.5">
-
-                          <RatingStars rating={item.rating} />
-
-                          <span className="text-[10px] text-neutral-400 sm:text-[11px]">
-                            {formatDate(item.created_at)}
-                          </span>
-
+                        <div
+                          className={
+                            isAttention
+                              ? "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#fff1ed] text-[10px] font-semibold text-[#c75e4b] sm:h-11 sm:w-11 sm:text-xs"
+                              : "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-[10px] font-semibold sm:h-11 sm:w-11 sm:text-xs"
+                          }
+                        >
+                          {item.rating}/5
                         </div>
 
-                        <p className="mt-3 text-xs leading-6 text-neutral-700 sm:text-sm sm:leading-7">
-                          {item.message}
-                        </p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <RatingStars
+                              rating={item.rating}
+                            />
 
+                            {isAttention && (
+                              <span className="rounded-full bg-[#fff1ed] px-2 py-1 text-[9px] font-semibold text-[#c75e4b]">
+                                Atención
+                              </span>
+                            )}
+
+                            {!hasComment && (
+                              <span className="rounded-full bg-neutral-100 px-2 py-1 text-[9px] font-medium text-neutral-400">
+                                Sin comentario
+                              </span>
+                            )}
+
+                            <span className="text-[10px] text-neutral-400 sm:text-[11px]">
+                              {formatDateTime(
+                                item.created_at
+                              )}
+                            </span>
+                          </div>
+
+                          {hasComment ? (
+                            <p className="mt-3 text-xs leading-6 text-neutral-700 sm:text-sm sm:leading-7">
+                              {item.message}
+                            </p>
+                          ) : (
+                            <p className="mt-3 text-xs leading-5 text-neutral-400">
+                              El cliente dejó solamente una
+                              valoración.
+                            </p>
+                          )}
+
+                          <p className="mt-3 text-[9px] text-neutral-400">
+                            {formatDate(item.created_at)}
+                          </p>
+                        </div>
                       </div>
-
-                    </div>
-
-                  </article>
-                ))}
-
+                    </article>
+                  );
+                })}
               </div>
             )}
-
           </section>
 
-          {/* TODAS LAS VALORACIONES */}
+          {/* LECTURA DEL PRODUCTO */}
 
           <section className="mt-4 rounded-[22px] border border-neutral-200 bg-white px-5 py-5 sm:px-6">
-
-            <div className="flex items-center gap-3">
-
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#e8f0f4]">
                 <Icon name="activity" size={16} />
               </div>
 
               <div>
                 <p className="text-xs font-semibold sm:text-sm">
-                  {feedback.length}{" "}
-                  {feedback.length === 1
-                    ? "valoración recibida"
-                    : "valoraciones recibidas"}
+                  Cómo leer esta sección
                 </p>
 
-                <p className="mt-0.5 text-[10px] text-neutral-500 sm:text-xs">
-                  Incluyendo las valoraciones sin comentario.
+                <p className="mt-1 text-[10px] leading-5 text-neutral-500 sm:text-xs sm:leading-6">
+                  Las valoraciones muestran qué tan buena fue
+                  la experiencia. Los comentarios agregan el
+                  contexto necesario para entender qué ocurrió.
+                  GuestTap usa esa información como base para
+                  detectar señales y oportunidades de mejora.
                 </p>
               </div>
-
             </div>
-
           </section>
 
           <footer className="py-8 text-center">
@@ -580,11 +998,8 @@ export default function FeedbackPage() {
               GuestTap · Panel de gestión
             </p>
           </footer>
-
         </div>
-
       </div>
-
     </main>
   );
 }

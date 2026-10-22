@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
 import QRCode from "qrcode";
-
 import { supabase } from "../../../lib/supabase";
 
 type Business = {
@@ -12,13 +10,27 @@ type Business = {
   slug: string;
 };
 
+type Stats = {
+  scans: number;
+  ratings: number;
+};
+
 const PRODUCTION_URL = "https://guesttap-five.vercel.app";
 
 function Icon({
   name,
   size = 20,
 }: {
-  name: "arrow" | "external" | "download" | "check" | "copy";
+  name:
+    | "arrow"
+    | "external"
+    | "download"
+    | "check"
+    | "copy"
+    | "scan"
+    | "star"
+    | "nfc"
+    | "link";
   size?: number;
 }) {
   const common = {
@@ -69,6 +81,46 @@ function Icon({
     );
   }
 
+  if (name === "scan") {
+    return (
+      <svg {...common}>
+        <path d="M7 3H5a2 2 0 0 0-2 2v2" />
+        <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+        <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+        <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+        <path d="M7 7h10v10H7z" />
+      </svg>
+    );
+  }
+
+  if (name === "star") {
+    return (
+      <svg {...common}>
+        <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+      </svg>
+    );
+  }
+
+  if (name === "nfc") {
+    return (
+      <svg {...common}>
+        <path d="M8 8.5a5 5 0 0 1 8 0" />
+        <path d="M6 6a8 8 0 0 1 12 0" />
+        <path d="M10 11a2.5 2.5 0 0 1 4 0" />
+        <path d="M12 14v7" />
+      </svg>
+    );
+  }
+
+  if (name === "link") {
+    return (
+      <svg {...common}>
+        <path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" />
+        <path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1" />
+      </svg>
+    );
+  }
+
   return (
     <svg {...common}>
       <path d="M5 12h14" />
@@ -78,8 +130,16 @@ function Icon({
 }
 
 export default function ClientQRPage() {
-  const [business, setBusiness] = useState<Business | null>(null);
+  const [business, setBusiness] =
+    useState<Business | null>(null);
+
   const [qr, setQr] = useState("");
+
+  const [stats, setStats] = useState<Stats>({
+    scans: 0,
+    ratings: 0,
+  });
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -102,27 +162,33 @@ export default function ClientQRPage() {
       return;
     }
 
-    const { data: businessUser, error: businessUserError } =
-      await supabase
-        .from("business_users")
-        .select("business_id")
-        .eq("user_id", user.id)
-        .limit(1)
-        .maybeSingle();
+    const {
+      data: businessUser,
+      error: businessUserError,
+    } = await supabase
+      .from("business_users")
+      .select("business_id")
+      .eq("user_id", user.id)
+      .limit(1)
+      .maybeSingle();
 
     if (businessUserError || !businessUser) {
       console.error(businessUserError);
-      setError("No encontramos un negocio asociado a tu cuenta.");
+      setError(
+        "No encontramos un negocio asociado a tu cuenta."
+      );
       setLoading(false);
       return;
     }
 
-    const { data: businessData, error: businessError } =
-      await supabase
-        .from("businesses")
-        .select("id, name, slug")
-        .eq("id", businessUser.business_id)
-        .single();
+    const {
+      data: businessData,
+      error: businessError,
+    } = await supabase
+      .from("businesses")
+      .select("id, name, slug")
+      .eq("id", businessUser.business_id)
+      .single();
 
     if (businessError || !businessData) {
       console.error(businessError);
@@ -145,7 +211,41 @@ export default function ClientQRPage() {
     } catch (qrError) {
       console.error(qrError);
       setError("No pudimos generar el QR.");
+      setLoading(false);
+      return;
     }
+
+    const [
+      scansResult,
+      ratingsResult,
+    ] = await Promise.all([
+      supabase
+        .from("scan_events")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq(
+          "business_id",
+          businessData.id
+        ),
+
+      supabase
+        .from("feedback")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq(
+          "business_id",
+          businessData.id
+        ),
+    ]);
+
+    setStats({
+      scans: scansResult.count || 0,
+      ratings: ratingsResult.count || 0,
+    });
 
     setLoading(false);
   }
@@ -163,10 +263,14 @@ export default function ClientQRPage() {
   async function copiarEnlace() {
     if (!business) return;
 
-    const publicUrl = `${PRODUCTION_URL}/go/${business.slug}`;
+    const publicUrl =
+      `${PRODUCTION_URL}/go/${business.slug}`;
 
     try {
-      await navigator.clipboard.writeText(publicUrl);
+      await navigator.clipboard.writeText(
+        publicUrl
+      );
+
       setCopied(true);
 
       setTimeout(() => {
@@ -180,20 +284,22 @@ export default function ClientQRPage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-[#f6f6f4] px-4 py-5 sm:p-8">
-        <div className="mx-auto max-w-[1100px]">
+        <div className="mx-auto max-w-[1120px]">
           <div className="animate-pulse">
             <div className="h-10 w-40 rounded-xl bg-neutral-200" />
 
-            <div className="mx-auto mt-8 max-w-3xl rounded-[28px] bg-white p-6 sm:p-10">
-              <div className="mx-auto h-7 w-52 rounded bg-neutral-200" />
+            <div className="mx-auto mt-8 max-w-5xl rounded-[28px] bg-white p-6 sm:p-10">
+              <div className="h-7 w-52 rounded bg-neutral-200" />
 
-              <div className="mx-auto mt-3 h-4 w-72 rounded bg-neutral-100" />
+              <div className="mt-3 h-4 w-72 rounded bg-neutral-100" />
 
-              <div className="mx-auto mt-8 h-72 w-72 rounded-3xl bg-neutral-100 sm:h-80 sm:w-80" />
+              <div className="mt-8 h-80 rounded-3xl bg-neutral-100" />
 
-              <div className="mt-8 h-12 rounded-xl bg-neutral-100" />
-
-              <div className="mt-3 h-12 rounded-xl bg-neutral-200" />
+              <div className="mt-5 grid grid-cols-3 gap-3">
+                <div className="h-24 rounded-2xl bg-neutral-100" />
+                <div className="h-24 rounded-2xl bg-neutral-100" />
+                <div className="h-24 rounded-2xl bg-neutral-100" />
+              </div>
             </div>
           </div>
         </div>
@@ -205,12 +311,12 @@ export default function ClientQRPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f6f6f4] px-5">
         <div className="w-full max-w-md rounded-[28px] border border-neutral-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-black text-xl font-bold text-white">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#173F53] text-xl font-bold text-white">
             G
           </div>
 
           <h1 className="mt-6 text-xl font-semibold text-neutral-950">
-            No pudimos cargar tu QR
+            No pudimos cargar tus puntos de contacto
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-neutral-500">
@@ -219,7 +325,7 @@ export default function ClientQRPage() {
 
           <a
             href="/panel"
-            className="mt-7 inline-flex items-center gap-2 rounded-xl bg-black px-5 py-3 text-sm font-semibold text-white"
+            className="mt-7 inline-flex items-center gap-2 rounded-xl bg-[#173F53] px-5 py-3 text-sm font-semibold text-white"
           >
             Volver al panel
             <Icon name="arrow" size={15} />
@@ -233,21 +339,30 @@ export default function ClientQRPage() {
     return null;
   }
 
-  const publicUrl = `${PRODUCTION_URL}/go/${business.slug}`;
+  const publicUrl =
+    `${PRODUCTION_URL}/go/${business.slug}`;
+
+  const conversion =
+    stats.scans > 0
+      ? Math.round(
+          (stats.ratings / stats.scans) * 100
+        )
+      : 0;
 
   return (
-    <main className="min-h-screen bg-[#f6f6f4] text-neutral-950">
+    <main className="min-h-screen bg-[#f6f6f4] text-[#183B4E]">
+
       {/* HEADER */}
 
       <header className="border-b border-neutral-200 bg-white">
-        <div className="mx-auto flex max-w-[1100px] items-center justify-between px-4 py-4 sm:px-7 sm:py-5 lg:px-8">
+        <div className="mx-auto flex max-w-[1120px] items-center justify-between px-4 py-4 sm:px-7 sm:py-5 lg:px-8">
           <div>
             <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-neutral-400 sm:text-[10px]">
               GuestTap
             </p>
 
             <h1 className="mt-1 text-lg font-semibold tracking-tight sm:text-xl">
-              Mi QR
+              Puntos de contacto
             </h1>
           </div>
 
@@ -271,34 +386,110 @@ export default function ClientQRPage() {
       {/* CONTENIDO */}
 
       <div className="px-4 py-6 sm:px-7 sm:py-10 lg:px-8">
-        <div className="mx-auto max-w-[1000px]">
+        <div className="mx-auto max-w-[1120px]">
 
           {/* INTRO */}
 
-          <div className="mx-auto max-w-2xl text-center">
+          <section>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-400">
-              Tu GuestTap
+              Experiencia GuestTap
             </p>
 
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] sm:text-3xl">
-              Tu código QR
-            </h2>
+            <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h2 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
+                  Conectá tu negocio.
+                </h2>
 
-            <p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-neutral-500 sm:text-sm sm:leading-6">
-              Tus clientes pueden escanear este código para acceder directamente a la página de {business.name}.
-            </p>
-          </div>
+                <p className="mt-3 max-w-2xl text-xs leading-5 text-neutral-500 sm:text-sm sm:leading-6">
+                  Usá QR o NFC para llevar a tus clientes
+                  directamente a tu experiencia GuestTap.
+                  Cada interacción queda registrada para
+                  medir cómo funciona el sistema.
+                </p>
+              </div>
 
-          {/* QR CARD */}
+              <div className="flex items-center gap-2 self-start rounded-full border border-[#D6E5DF] bg-[#F2F8F5] px-3.5 py-2 text-[10px] font-semibold text-[#47707E]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#25B7A4]" />
+                Punto activo
+              </div>
+            </div>
+          </section>
 
-          <section className="mx-auto mt-7 max-w-3xl overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-[0_10px_40px_rgba(0,0,0,0.04)] sm:mt-9">
-            <div className="grid lg:grid-cols-[1fr_0.8fr]">
+          {/* STATS */}
+
+          <section className="mt-6 grid grid-cols-3 gap-2.5 sm:gap-3">
+            <div className="rounded-[20px] border border-neutral-200 bg-white p-4 sm:p-5">
+              <div className="flex items-center justify-between">
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                  Escaneos
+                </p>
+
+                <div className="hidden h-8 w-8 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500 sm:flex">
+                  <Icon name="scan" size={14} />
+                </div>
+              </div>
+
+              <p className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+                {stats.scans}
+              </p>
+
+              <p className="mt-1 text-[9px] leading-4 text-neutral-400 sm:text-xs">
+                interacciones registradas
+              </p>
+            </div>
+
+            <div className="rounded-[20px] border border-neutral-200 bg-white p-4 sm:p-5">
+              <div className="flex items-center justify-between">
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                  Valoraciones
+                </p>
+
+                <div className="hidden h-8 w-8 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500 sm:flex">
+                  <Icon name="star" size={14} />
+                </div>
+              </div>
+
+              <p className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+                {stats.ratings}
+              </p>
+
+              <p className="mt-1 text-[9px] leading-4 text-neutral-400 sm:text-xs">
+                respuestas recibidas
+              </p>
+            </div>
+
+            <div className="rounded-[20px] border border-neutral-200 bg-white p-4 sm:p-5">
+              <div className="flex items-center justify-between">
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-neutral-400">
+                  Conversión
+                </p>
+
+                <div className="hidden h-8 w-8 items-center justify-center rounded-xl bg-neutral-100 text-neutral-500 sm:flex">
+                  <Icon name="link" size={14} />
+                </div>
+              </div>
+
+              <p className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+                {conversion}%
+              </p>
+
+              <p className="mt-1 text-[9px] leading-4 text-neutral-400 sm:text-xs">
+                scan → valoración
+              </p>
+            </div>
+          </section>
+
+          {/* QR + INFO */}
+
+          <section className="mt-5 overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-[0_10px_40px_rgba(0,0,0,0.035)]">
+            <div className="grid lg:grid-cols-[1fr_0.82fr]">
 
               {/* QR */}
 
               <div className="flex flex-col items-center justify-center border-b border-neutral-200 px-5 py-7 sm:px-8 sm:py-9 lg:border-b-0 lg:border-r">
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                  <span className="h-2 w-2 rounded-full bg-[#25B7A4]" />
 
                   <p className="text-[10px] font-semibold uppercase tracking-[0.15em] text-neutral-400">
                     QR activo
@@ -309,18 +500,29 @@ export default function ClientQRPage() {
                   <img
                     src={qr}
                     alt={`Código QR de ${business.name}`}
-                    className="h-[250px] w-[250px] sm:h-[320px] sm:w-[320px]"
+                    className="h-[250px] w-[250px] sm:h-[330px] sm:w-[330px]"
                   />
                 </div>
 
                 <p className="mt-5 text-center text-xs text-neutral-400">
-                  Escaneá el código para probarlo.
+                  Escanealo para probar la experiencia.
                 </p>
+
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  <span className="rounded-full bg-[#F3F6F4] px-3 py-1.5 text-[9px] font-semibold text-[#53656C]">
+                    Seguimiento activo
+                  </span>
+
+                  <span className="rounded-full bg-[#F3F6F4] px-3 py-1.5 text-[9px] font-semibold text-[#53656C]">
+                    Analytics conectado
+                  </span>
+                </div>
               </div>
 
-              {/* INFO */}
+              {/* DESTINO */}
 
               <div className="flex flex-col justify-center px-5 py-7 sm:px-8 sm:py-9">
+
                 <p className="text-[10px] font-bold uppercase tracking-[0.17em] text-neutral-400">
                   Destino
                 </p>
@@ -330,15 +532,17 @@ export default function ClientQRPage() {
                 </h3>
 
                 <p className="mt-2 text-xs leading-5 text-neutral-500 sm:text-sm sm:leading-6">
-                  Este QR está conectado a tu página pública de GuestTap.
+                  Este punto lleva a tus clientes a la
+                  experiencia pública de GuestTap y registra
+                  la interacción.
                 </p>
 
-                {/* URL */}
+                {/* LINK */}
 
                 <div className="mt-6">
                   <div className="mb-2 flex items-center justify-between">
                     <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-neutral-400">
-                      Enlace
+                      Enlace del punto
                     </p>
 
                     <button
@@ -373,7 +577,7 @@ export default function ClientQRPage() {
                   <button
                     type="button"
                     onClick={descargarQR}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-black px-5 py-3.5 text-xs font-semibold text-white transition hover:bg-neutral-800 sm:text-sm"
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#173F53] px-5 py-3.5 text-xs font-semibold text-white transition hover:bg-[#214F65] sm:text-sm"
                   >
                     <Icon name="download" size={16} />
                     Descargar QR
@@ -385,7 +589,7 @@ export default function ClientQRPage() {
                     rel="noreferrer"
                     className="flex w-full items-center justify-center gap-2 rounded-xl border border-neutral-200 bg-white px-5 py-3.5 text-xs font-semibold text-neutral-800 transition hover:bg-neutral-50 sm:text-sm"
                   >
-                    Ver página pública
+                    Ver experiencia pública
                     <Icon name="external" size={15} />
                   </a>
                 </div>
@@ -393,21 +597,137 @@ export default function ClientQRPage() {
             </div>
           </section>
 
-          {/* INFO EXTRA */}
+          {/* NFC */}
 
-          <section className="mx-auto mt-4 max-w-3xl rounded-[22px] border border-neutral-200 bg-white px-5 py-5 sm:px-6">
+          <section className="mt-5 overflow-hidden rounded-[26px] border border-[#CFE2DE] bg-[#F1F9F7]">
+            <div className="grid lg:grid-cols-[auto_1fr]">
+
+              <div className="flex items-center justify-center px-6 py-7 sm:px-8 lg:w-[190px] lg:border-r lg:border-[#D5E7E3]">
+                <div className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#173F53] text-white">
+                  <Icon name="nfc" size={29} />
+                </div>
+              </div>
+
+              <div className="p-6 sm:p-8">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#47707E]">
+                      También compatible con NFC
+                    </p>
+
+                    <h3 className="mt-1.5 text-xl font-bold tracking-tight text-[#173F53]">
+                      Un toque y listo.
+                    </h3>
+
+                    <p className="mt-2 max-w-2xl text-xs leading-5 text-[#607781] sm:text-sm sm:leading-6">
+                      Podés programar una etiqueta NFC con
+                      exactamente el mismo enlace de este punto.
+                      El cliente acerca su teléfono y entra a
+                      GuestTap sin necesidad de escanear un QR.
+                    </p>
+                  </div>
+
+                  <div className="shrink-0 rounded-full border border-[#CFE2DE] bg-white px-3 py-1.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#47707E]">
+                    NFC ready
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 sm:grid-cols-3">
+
+                  <div className="rounded-2xl border border-[#D5E7E3] bg-white p-4">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.13em] text-[#8A969B]">
+                      01
+                    </p>
+
+                    <p className="mt-2 text-xs font-semibold text-[#173F53]">
+                      Conseguí una etiqueta NFC
+                    </p>
+
+                    <p className="mt-1 text-[10px] leading-4 text-[#718087]">
+                      Una etiqueta NFC estándar sirve.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#D5E7E3] bg-white p-4">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.13em] text-[#8A969B]">
+                      02
+                    </p>
+
+                    <p className="mt-2 text-xs font-semibold text-[#173F53]">
+                      Programá este enlace
+                    </p>
+
+                    <p className="mt-1 text-[10px] leading-4 text-[#718087]">
+                      Usá el enlace de este punto de contacto.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[#D5E7E3] bg-white p-4">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.13em] text-[#8A969B]">
+                      03
+                    </p>
+
+                    <p className="mt-2 text-xs font-semibold text-[#173F53]">
+                      Colocala en tu negocio
+                    </p>
+
+                    <p className="mt-1 text-[10px] leading-4 text-[#718087]">
+                      Mesas, mostradores, habitaciones o cajas.
+                    </p>
+                  </div>
+
+                </div>
+
+                <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-[#D5E7E3] bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A969B]">
+                      Enlace NFC
+                    </p>
+
+                    <p className="mt-1 break-all text-[11px] font-medium text-[#53656C]">
+                      {publicUrl}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={copiarEnlace}
+                    className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-[#173F53] px-4 py-3 text-[10px] font-semibold text-white transition hover:bg-[#214F65]"
+                  >
+                    {copied ? (
+                      <>
+                        <Icon name="check" size={13} />
+                        Copiado
+                      </>
+                    ) : (
+                      <>
+                        <Icon name="copy" size={13} />
+                        Copiar enlace NFC
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* USOS */}
+
+          <section className="mt-5 rounded-[24px] border border-neutral-200 bg-white p-5 sm:p-6">
             <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100">
-                <Icon name="check" size={16} />
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F1F4F3] text-[#53656C]">
+                <Icon name="link" size={17} />
               </div>
 
               <div>
                 <p className="text-xs font-semibold sm:text-sm">
-                  Podés usar este QR donde quieras
+                  Un punto puede estar donde tenga sentido para tu negocio.
                 </p>
 
                 <p className="mt-1 text-[10px] leading-5 text-neutral-500 sm:text-xs">
-                  Imprimilo, colocálo en mesas, mostradores, habitaciones, cartelería o cualquier otro punto de contacto con tus clientes.
+                  Usalo en mesas, mostradores, habitaciones,
+                  cartelería, packaging, recepción o cualquier
+                  otro lugar donde quieras capturar experiencia.
                 </p>
               </div>
             </div>
@@ -415,7 +735,7 @@ export default function ClientQRPage() {
 
           <footer className="py-8 text-center">
             <p className="text-[9px] text-neutral-400 sm:text-[10px]">
-              GuestTap · Herramientas para tu negocio
+              GuestTap · Customer Experience Intelligence
             </p>
           </footer>
 

@@ -1,0 +1,2752 @@
+﻿"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+
+import { supabase } from "../../../lib/supabase";
+
+type Business = {
+  id: number;
+  name: string;
+  logo_url: string | null;
+};
+
+type ScanEvent = {
+  id: number;
+  source: string;
+  created_at: string;
+  is_test: boolean;
+};
+
+type Feedback = {
+  id: number;
+  rating: number;
+  message: string | null;
+  created_at: string;
+  scan_event_id: number | null;
+  is_test: boolean;
+};
+
+type ImprovementAction = {
+  id: number;
+  business_id: number;
+  title: string;
+  description: string | null;
+  source_type: string;
+  source_key: string | null;
+  status: "pending" | "in_progress" | "resolved" | "dismissed";
+  priority: "low" | "medium" | "high";
+  created_at: string;
+  started_at: string | null;
+  resolved_at: string | null;
+};
+
+type PeriodKey = "7" | "30" | "90" | "all";
+
+type TopicDefinition = {
+  key: string;
+  title: string;
+  description: string;
+  keywords: string[];
+};
+
+type IntelligenceSignal = {
+  key: string;
+  title: string;
+  description: string;
+  count: number;
+  criticalCount: number;
+  positiveCount: number;
+  averageRating: number;
+  criticalRate: number;
+  confidence: "baja" | "media" | "alta";
+  status: "signal" | "emerging" | "attention" | "strength";
+  evidence: Feedback[];
+};
+
+function getIntelligenceTopics(businessType: string | null): TopicDefinition[] {
+  const type = businessType || "other";
+
+  return [
+  {
+    key: "music",
+    title: "MÃºsica y volumen",
+    description:
+      "Comentarios relacionados con mÃºsica, ruido, sonido o volumen del espacio.",
+    keywords: ["musica", "volumen", "ruido", "sonido", "audio"],
+  },
+  {
+    key: "wait",
+    title: "Tiempos de espera",
+    description:
+      "Comentarios relacionados con demoras, rapidez o tiempos de atenciÃ³n.",
+    keywords: [
+      "espera",
+      "demora",
+      "demoras",
+      "tarde",
+      "lento",
+      "lenta",
+      "rapido",
+      "rapida",
+      "rapidez",
+      "tiempo",
+    ],
+  },
+  {
+    key: "attention",
+    title: "AtenciÃ³n del personal",
+    description:
+      "Comentarios sobre atenciÃ³n, servicio, personal o trato recibido.",
+    keywords: [
+      "atencion",
+      "atender",
+      "personal",
+      "empleado",
+      "empleados",
+      "mozo",
+      "mozos",
+      "servicio",
+      "trato",
+    ],
+  },
+  {
+    key: "cleanliness",
+    title: "Limpieza",
+    description:
+      "Comentarios relacionados con limpieza, higiene, suciedad o mantenimiento.",
+    keywords: [
+      "limpieza",
+      "limpio",
+      "limpia",
+      "sucio",
+      "sucia",
+      "suciedad",
+      "higiene",
+      "orden",
+    ],
+  },
+  {
+    key: "price",
+    title: "Precio",
+    description:
+      "Comentarios relacionados con precio, costo, valor o percepciÃ³n de caro/barato.",
+    keywords: [
+      "precio",
+      "precios",
+      "caro",
+      "cara",
+      "caros",
+      "caras",
+      "barato",
+      "barata",
+      "costoso",
+      "costosa",
+      "costo",
+      "valor",
+    ],
+  },
+  {
+    key: "food",
+    title: "Producto o comida",
+    description:
+      "Comentarios sobre producto, comida, sabor, platos o calidad.",
+    keywords: [
+      "comida",
+      "plato",
+      "platos",
+      "sabor",
+      "cocina",
+      "producto",
+      "productos",
+      "calidad",
+    ],
+  },
+  {
+    key: "space",
+    title: "Ambiente y espacio",
+    description:
+      "Comentarios sobre ambiente, espacio, temperatura o comodidad.",
+    keywords: [
+      "ambiente",
+      "espacio",
+      "lugar",
+      "temperatura",
+      "frio",
+      "fria",
+      "calor",
+      "caluroso",
+      "comodo",
+      "comoda",
+    ],
+  },
+];
+
+const ignoredMessages = [
+  "hola chat",
+  "prueba guesttap",
+  "test guesttap",
+  "prueba",
+  "test",
+  "testing",
+  "asdf",
+  "asd",
+  "hola",
+];
+
+function normalizeText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isUsefulComment(message: string | null) {
+  if (!message) return false;
+
+  const normalized = normalizeText(message);
+
+  if (normalized.length < 8) return false;
+
+  if (ignoredMessages.includes(normalized)) return false;
+
+  if (
+    normalized.startsWith("prueba guesttap") ||
+    normalized.startsWith("test guesttap")
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("es-AR").format(value);
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "short",
+  });
+}
+
+function formatLongDate(value: string) {
+  return new Date(value).toLocaleDateString("es-AR", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function startOfDay(date: Date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function addDays(date: Date, days: number) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function average(values: number[]) {
+  if (values.length === 0) return null;
+
+  return Number(
+    (
+      values.reduce((sum, value) => sum + value, 0) / values.length
+    ).toFixed(1)
+  );
+}
+
+function Icon({
+  name,
+  size = 20,
+}: {
+  name:
+    | "activity"
+    | "alert"
+    | "arrow"
+    | "check"
+    | "light"
+    | "scan"
+    | "trend"
+    | "google"
+    | "clock";
+  size?: number;
+}) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.8,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+
+  if (name === "check") {
+    return (
+      <svg {...common}>
+        <path d="m5 12 4 4L19 6" />
+      </svg>
+    );
+  }
+
+  if (name === "alert") {
+    return (
+      <svg {...common}>
+        <path d="M10.3 4.5 3.6 16a2 2 0 0 0 1.7 3h13.4a2 2 0 0 0 1.7-3L13.7 4.5a2 2 0 0 0-3.4 0Z" />
+        <path d="M12 9v4" />
+        <path d="M12 16h.01" />
+      </svg>
+    );
+  }
+
+  if (name === "light") {
+    return (
+      <svg {...common}>
+        <path d="M9 18h6" />
+        <path d="M10 22h4" />
+        <path d="M8.4 14.8A6 6 0 1 1 15.6 14.8C14.6 15.6 14 16.6 14 18h-4c0-1.4-.6-2.4-1.6-3.2Z" />
+      </svg>
+    );
+  }
+
+  if (name === "scan") {
+    return (
+      <svg {...common}>
+        <path d="M4 8V5a1 1 0 0 1 1-1h3" />
+        <path d="M16 4h3a1 1 0 0 1 1 1v3" />
+        <path d="M20 16v3a1 1 0 0 1-1 1h-3" />
+        <path d="M8 20H5a1 1 0 0 1-1-1v-3" />
+        <path d="M8 8h8v8H8z" />
+      </svg>
+    );
+  }
+
+  if (name === "trend") {
+    return (
+      <svg {...common}>
+        <path d="M3 17 9 11l4 4 8-9" />
+        <path d="M16 6h5v5" />
+      </svg>
+    );
+  }
+
+  if (name === "activity") {
+    return (
+      <svg {...common}>
+        <path d="M3 12h4l2-7 4 14 2-7h6" />
+      </svg>
+    );
+  }
+
+  if (name === "google") {
+    return (
+      <svg {...common}>
+        <path d="M21 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.1a4.4 4.4 0 0 1-1.9 2.9v2.4h3.1c1.8-1.7 2.7-4.1 2.7-7.1Z" />
+        <path d="M12 21c2.6 0 4.8-.9 6.3-2.4l-3.1-2.4c-.9.6-1.9.9-3.2.9-2.5 0-4.6-1.7-5.4-4h-3.2v2.5A9.5 9.5 0 0 0 12 21Z" />
+        <path d="M6.6 13.1a5.7 5.7 0 0 1 0-2.2V8.4H3.4a9 9 0 0 0 0 7.2l3.2-2.5Z" />
+        <path d="M12 6.7c1.4 0 2.7.5 3.7 1.5l2.8-2.8C16.8 3.9 14.6 3 12 3a9.5 9.5 0 0 0-8.6 5.4l3.2 2.5c.8-2.4 2.9-4.2 5.4-4.2Z" />
+      </svg>
+    );
+  }
+
+  if (name === "clock") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7v5l3 2" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg {...common}>
+      <path d="M5 12h14" />
+      <path d="m13 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+function Stars({
+  rating,
+  large = false,
+}: {
+  rating: number;
+  large?: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center gap-0.5 ${
+        large ? "text-base" : "text-sm"
+      }`}
+      aria-label={`${rating} de 5 estrellas`}
+    >
+      {Array.from({ length: 5 }, (_, index) => (
+        <span
+          key={index}
+          className={
+            index < Math.round(rating)
+              ? "text-[#E7A532]"
+              : "text-[#CBD5D8]"
+          }
+        >
+          â˜…
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function StatusBadge({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "positive" | "warning" | "critical";
+}) {
+  const styles = {
+    neutral: "border-[#D8E1E2] bg-[#F7F9F9] text-[#4E6570]",
+    positive: "border-[#BDE5DD] bg-[#EFFAF7] text-[#078B78]",
+    warning: "border-[#F0D6A8] bg-[#FFF8EB] text-[#A56B00]",
+    critical: "border-[#F0C7BF] bg-[#FFF3F0] text-[#C95743]",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-semibold ${styles[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function ActionStatus({
+  status,
+}: {
+  status: ImprovementAction["status"];
+}) {
+  const map = {
+    pending: {
+      label: "Pendiente",
+      tone: "warning" as const,
+    },
+    in_progress: {
+      label: "En progreso",
+      tone: "positive" as const,
+    },
+    resolved: {
+      label: "Resuelta",
+      tone: "positive" as const,
+    },
+    dismissed: {
+      label: "Descartada",
+      tone: "neutral" as const,
+    },
+  };
+
+  const item = map[status];
+
+  return <StatusBadge tone={item.tone}>{item.label}</StatusBadge>;
+}
+
+export default function AnalyticsPage() {
+  const [business, setBusiness] = useState<Business | null>(null);
+  const [scans, setScans] = useState<ScanEvent[]>([]);
+  const [feedback, setFeedback] = useState<Feedback[]>([]);
+  const [actions, setActions] = useState<ImprovementAction[]>([]);
+
+  const [period, setPeriod] = useState<PeriodKey>("30");
+
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState("");
+  const [actionLoading, setActionLoading] = useState<number | string | null>(null);
+
+  useEffect(() => {
+    cargarAnalytics();
+  }, []);
+
+  async function cargarAnalytics() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("No hay una sesiÃ³n iniciada.");
+        return;
+      }
+
+      const { data: businessUser, error: businessUserError } =
+        await supabase
+          .from("business_users")
+          .select("business_id")
+          .eq("user_id", user.id)
+          .single();
+
+      if (businessUserError || !businessUser) {
+        console.error(businessUserError);
+        setError("No encontramos un negocio asociado a tu cuenta.");
+        return;
+      }
+
+      const { data: businessData, error: businessError } = await supabase
+        .from("businesses")
+        .select("id, name, logo_url, business_type")
+        .eq("id", businessUser.business_id)
+        .single();
+
+      if (businessError || !businessData) {
+        console.error(businessError);
+        setError("No pudimos cargar tu negocio.");
+        return;
+      }
+
+      const { data: scanData, error: scanError } = await supabase
+        .from("scan_events")
+        .select("id, source, created_at, is_test")
+        .eq("business_id", businessData.id)
+        .eq("is_test", false)
+        .order("created_at", { ascending: false });
+
+      if (scanError) {
+        console.error(scanError);
+        setError("No pudimos cargar los datos de actividad.");
+        return;
+      }
+
+      const { data: feedbackData, error: feedbackError } = await supabase
+        .from("feedback")
+        .select(
+          "id, rating, message, created_at, scan_event_id, is_test"
+        )
+        .eq("business_id", businessData.id)
+        .eq("is_test", false)
+        .order("created_at", { ascending: false });
+
+      if (feedbackError) {
+        console.error(feedbackError);
+        setError("No pudimos cargar las valoraciones.");
+        return;
+      }
+
+      const { data: actionData, error: actionError } = await supabase
+        .from("improvement_actions")
+        .select(
+          "id, business_id, title, description, source_type, source_key, status, priority, created_at, started_at, resolved_at"
+        )
+        .eq("business_id", businessData.id)
+        .order("created_at", { ascending: false });
+
+      if (actionError) {
+        console.error(actionError);
+        // Las acciones son una capa nueva. No bloqueamos Analytics
+        // si todavÃ­a no existen datos.
+      }
+
+      setBusiness(businessData);
+      setScans(scanData || []);
+      setFeedback(feedbackData || []);
+      setActions(actionData || []);
+    } catch (err) {
+      console.error(err);
+      setError("OcurriÃ³ un error al cargar Analytics.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  async function refrescar() {
+    setRefreshing(true);
+    await cargarAnalytics();
+  }
+
+  async function crearAccion(signal: IntelligenceSignal) {
+    if (!business) return;
+
+    setActionLoading(signal.key);
+
+    try {
+      const existing = actions.find(
+        (action) =>
+          action.source_key === signal.key &&
+          action.status !== "dismissed" &&
+          action.status !== "resolved"
+      );
+
+      if (existing) {
+        setActionLoading(null);
+        return;
+      }
+
+      const { data, error: insertError } = await supabase
+        .from("improvement_actions")
+        .insert({
+          business_id: business.id,
+          title: `Revisar ${signal.title.toLowerCase()}`,
+          description: buildActionDescription(signal),
+          source_type: "intelligence",
+          source_key: signal.key,
+          priority:
+            signal.status === "attention" ? "high" : "medium",
+          status: "pending",
+        })
+        .select(
+          "id, business_id, title, description, source_type, source_key, status, priority, created_at, started_at, resolved_at"
+        )
+        .single();
+
+      if (insertError) {
+        console.error(insertError);
+        setError("No pudimos crear la acciÃ³n.");
+        return;
+      }
+
+      if (data) {
+        setActions((current) => [data, ...current]);
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function actualizarAccion(
+    action: ImprovementAction,
+    nextStatus: ImprovementAction["status"]
+  ) {
+    setActionLoading(action.id);
+
+    try {
+      const updateData: Partial<ImprovementAction> = {
+        status: nextStatus,
+      };
+
+      if (nextStatus === "in_progress" && !action.started_at) {
+        updateData.started_at = new Date().toISOString();
+      }
+
+      if (nextStatus === "resolved") {
+        updateData.resolved_at = new Date().toISOString();
+      }
+
+      const { data, error: updateError } = await supabase
+        .from("improvement_actions")
+        .update(updateData)
+        .eq("id", action.id)
+        .select(
+          "id, business_id, title, description, source_type, source_key, status, priority, created_at, started_at, resolved_at"
+        )
+        .single();
+
+      if (updateError) {
+        console.error(updateError);
+        setError("No pudimos actualizar la acciÃ³n.");
+        return;
+      }
+
+      if (data) {
+        setActions((current) =>
+          current.map((item) =>
+            item.id === action.id ? data : item
+          )
+        );
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  const analytics = useMemo(() => {
+    const now = new Date();
+    const today = startOfDay(now);
+    const tomorrow = addDays(today, 1);
+
+    let currentStart: Date;
+
+    if (period === "all") {
+      const dates = [
+        ...feedback.map((item) => new Date(item.created_at)),
+        ...scans.map((item) => new Date(item.created_at)),
+      ];
+
+      currentStart =
+        dates.length > 0
+          ? startOfDay(
+              new Date(
+                Math.min(...dates.map((date) => date.getTime()))
+              )
+            )
+          : today;
+    } else {
+      const days = Number(period);
+      currentStart = addDays(today, -(days - 1));
+    }
+
+    const periodDays =
+      period === "all"
+        ? Math.max(
+            1,
+            Math.ceil(
+              (tomorrow.getTime() - currentStart.getTime()) /
+                86400000
+            )
+          )
+        : Number(period);
+
+    const previousStart =
+      period === "all"
+        ? null
+        : addDays(currentStart, -periodDays);
+
+    const currentFeedback = feedback.filter((item) => {
+      const date = new Date(item.created_at);
+      return date >= currentStart && date < tomorrow;
+    });
+
+    const previousFeedback = feedback.filter((item) => {
+      if (!previousStart) return false;
+
+      const date = new Date(item.created_at);
+
+      return date >= previousStart && date < currentStart;
+    });
+
+    const currentScans = scans.filter((item) => {
+      const date = new Date(item.created_at);
+      return date >= currentStart && date < tomorrow;
+    });
+
+    const previousScans = scans.filter((item) => {
+      if (!previousStart) return false;
+
+      const date = new Date(item.created_at);
+
+      return date >= previousStart && date < currentStart;
+    });
+
+    const feedbackTotal = currentFeedback.length;
+    const comments = currentFeedback.filter((item) =>
+      isUsefulComment(item.message)
+    );
+
+    const allComments = currentFeedback.filter(
+      (item) =>
+        typeof item.message === "string" &&
+        item.message.trim().length > 0
+    );
+
+    const averageRating = average(
+      currentFeedback.map((item) => item.rating)
+    );
+
+    const previousAverage = average(
+      previousFeedback.map((item) => item.rating)
+    );
+
+    const change =
+      averageRating !== null && previousAverage !== null
+        ? Number(
+            (averageRating - previousAverage).toFixed(1)
+          )
+        : null;
+
+    const canCompare =
+      period !== "all" &&
+      currentFeedback.length >= 5 &&
+      previousFeedback.length >= 5;
+
+    const positiveCount = currentFeedback.filter(
+      (item) => item.rating >= 4
+    ).length;
+
+    const neutralCount = currentFeedback.filter(
+      (item) => item.rating === 3
+    ).length;
+
+    const criticalCount = currentFeedback.filter(
+      (item) => item.rating <= 2
+    ).length;
+
+    const positivePercentage =
+      feedbackTotal > 0
+        ? Math.round((positiveCount / feedbackTotal) * 100)
+        : 0;
+
+    const neutralPercentage =
+      feedbackTotal > 0
+        ? Math.round((neutralCount / feedbackTotal) * 100)
+        : 0;
+
+    const criticalPercentage =
+      feedbackTotal > 0
+        ? Math.round((criticalCount / feedbackTotal) * 100)
+        : 0;
+
+    const distribution = [5, 4, 3, 2, 1].map((rating) => {
+      const count = currentFeedback.filter(
+        (item) => item.rating === rating
+      ).length;
+
+      return {
+        rating,
+        count,
+        percentage:
+          feedbackTotal > 0
+            ? Math.round((count / feedbackTotal) * 100)
+            : 0,
+      };
+    });
+
+    const qrScans = currentScans.filter(
+      (item) => item.source?.toLowerCase() === "qr"
+    ).length;
+
+    const nfcScans = currentScans.filter(
+      (item) => item.source?.toLowerCase() === "nfc"
+    ).length;
+
+    const attributableFeedback = currentFeedback.filter(
+      (item) => item.scan_event_id !== null
+    ).length;
+
+    const conversion =
+      currentScans.length > 0
+        ? Math.round(
+            (attributableFeedback / currentScans.length) * 100
+          )
+        : 0;
+
+    const previousAttributable = previousFeedback.filter(
+      (item) => item.scan_event_id !== null
+    ).length;
+
+    const previousConversion =
+      previousScans.length > 0
+        ? Math.round(
+            (previousAttributable / previousScans.length) * 100
+          )
+        : null;
+
+    const comparison =
+      canCompare && change !== null
+        ? {
+            available: true,
+            change,
+            direction:
+              change > 0.1
+                ? "up"
+                : change < -0.1
+                ? "down"
+                : "stable",
+          }
+        : {
+            available: false,
+            change: null,
+            direction: "unknown",
+          };
+
+    /*
+     * -------------------------------------------------------
+     * INTELLIGENCE
+     *
+     * A topic is never called a recurring problem from one
+     * keyword match.
+     *
+     * signal:
+     *   1 mention
+     *
+     * emerging:
+     *   2 mentions
+     *
+     * attention:
+     *   3+ mentions with at least 2 critical ratings
+     *   OR 5+ mentions with negative average
+     *
+     * strength:
+     *   2+ mentions with average >= 4
+     * -------------------------------------------------------
+     */
+
+    const intelligenceSignals: IntelligenceSignal[] =
+      intelligenceTopics
+        .map((topic) => {
+          const matchingComments = comments.filter((item) => {
+            const message = item.message;
+
+            if (!message) return false;
+
+            const normalized = normalizeText(message);
+
+            return topic.keywords.some((keyword) =>
+              normalized.includes(keyword)
+            );
+          });
+
+          if (matchingComments.length === 0) {
+            return null;
+          }
+
+          const ratings = matchingComments.map(
+            (item) => item.rating
+          );
+
+          const avg = average(ratings) ?? 0;
+
+          const topicCriticalCount = matchingComments.filter(
+            (item) => item.rating <= 2
+          ).length;
+
+          const topicPositiveCount = matchingComments.filter(
+            (item) => item.rating >= 4
+          ).length;
+
+          const criticalRate =
+            matchingComments.length > 0
+              ? Math.round(
+                  (topicCriticalCount /
+                    matchingComments.length) *
+                    100
+                )
+              : 0;
+
+          let status: IntelligenceSignal["status"];
+
+          if (
+            matchingComments.length >= 3 &&
+            topicCriticalCount >= 2
+          ) {
+            status = "attention";
+          } else if (
+            matchingComments.length >= 5 &&
+            avg < 3.5
+          ) {
+            status = "attention";
+          } else if (matchingComments.length >= 2) {
+            status = "emerging";
+          } else {
+            status = "signal";
+          }
+
+          if (
+            matchingComments.length >= 2 &&
+            avg >= 4 &&
+            topicPositiveCount >= 2
+          ) {
+            status = "strength";
+          }
+
+          const confidence =
+            matchingComments.length >= 5
+              ? "alta"
+              : matchingComments.length >= 3
+              ? "media"
+              : "baja";
+
+          return {
+            key: topic.key,
+            title: topic.title,
+            description: topic.description,
+            count: matchingComments.length,
+            criticalCount: topicCriticalCount,
+            positiveCount: topicPositiveCount,
+            averageRating: avg,
+            criticalRate,
+            confidence,
+            status,
+            evidence: matchingComments.slice(0, 4),
+          };
+        })
+        .filter(
+          (signal): signal is IntelligenceSignal =>
+            signal !== null
+        )
+        .sort((a, b) => {
+          const priority = {
+            attention: 4,
+            emerging: 3,
+            signal: 2,
+            strength: 1,
+          };
+
+          return (
+            priority[b.status] - priority[a.status] ||
+            b.count - a.count
+          );
+        });
+
+    const attentionSignals = intelligenceSignals.filter(
+      (item) => item.status === "attention"
+    );
+
+    const strengthSignals = intelligenceSignals.filter(
+      (item) => item.status === "strength"
+    );
+
+    const activeActions = actions.filter(
+      (item) =>
+        item.status === "pending" ||
+        item.status === "in_progress"
+    );
+
+    const topActionSignal = attentionSignals[0] ??
+      intelligenceSignals.find(
+        (item) =>
+          item.status === "emerging" &&
+          item.criticalCount >= 1
+      ) ??
+      null;
+
+    /*
+     * -------------------------------------------------------
+     * DAILY SATISFACTION
+     *
+     * We only display days that actually had feedback.
+     * No fake zero days and no visual continuity over
+     * nonexistent observations.
+     * -------------------------------------------------------
+     */
+
+    const dailyMap = new Map<
+      string,
+      { date: Date; ratings: number[] }
+    >();
+
+    currentFeedback.forEach((item) => {
+      const date = startOfDay(new Date(item.created_at));
+      const key = date.toISOString().slice(0, 10);
+
+      const existing = dailyMap.get(key);
+
+      if (existing) {
+        existing.ratings.push(item.rating);
+      } else {
+        dailyMap.set(key, {
+          date,
+          ratings: [item.rating],
+        });
+      }
+    });
+
+    const dailySatisfaction = Array.from(
+      dailyMap.values()
+    )
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .map((item) => ({
+        date: item.date,
+        label: item.date.toLocaleDateString("es-AR", {
+          day: "numeric",
+          month: "short",
+        }),
+        average: average(item.ratings) ?? 0,
+        count: item.ratings.length,
+      }));
+
+    const enoughForTrend =
+      currentFeedback.length >= 5 &&
+      dailySatisfaction.length >= 3;
+
+    let trend:
+      | "positive"
+      | "negative"
+      | "stable"
+      | "insufficient" = "insufficient";
+
+    if (enoughForTrend) {
+      const midpoint = Math.ceil(
+        dailySatisfaction.length / 2
+      );
+
+      const firstHalf = dailySatisfaction.slice(0, midpoint);
+      const secondHalf = dailySatisfaction.slice(midpoint);
+
+      const firstAverage = average(
+        firstHalf.map((item) => item.average)
+      );
+
+      const secondAverage = average(
+        secondHalf.map((item) => item.average)
+      );
+
+      if (
+        firstAverage !== null &&
+        secondAverage !== null
+      ) {
+        const difference = secondAverage - firstAverage;
+
+        if (difference >= 0.3) {
+          trend = "positive";
+        } else if (difference <= -0.3) {
+          trend = "negative";
+        } else {
+          trend = "stable";
+        }
+      }
+    }
+
+    const recentComments = allComments.slice(0, 6);
+
+    const criticalComments = allComments
+      .filter((item) => item.rating <= 2)
+      .slice(0, 6);
+
+    return {
+      currentStart,
+      previousStart,
+      periodDays,
+
+      feedbackTotal,
+      comments,
+      allComments,
+      recentComments,
+      criticalComments,
+
+      averageRating,
+      previousAverage,
+      change,
+      canCompare,
+      comparison,
+
+      positiveCount,
+      neutralCount,
+      criticalCount,
+
+      positivePercentage,
+      neutralPercentage,
+      criticalPercentage,
+
+      distribution,
+
+      scansTotal: currentScans.length,
+      previousScansTotal: previousScans.length,
+      qrScans,
+      nfcScans,
+
+      attributableFeedback,
+      conversion,
+      previousConversion,
+
+      intelligenceSignals,
+      attentionSignals,
+      strengthSignals,
+
+      activeActions,
+      topActionSignal,
+
+      dailySatisfaction,
+      enoughForTrend,
+      trend,
+    };
+  }, [feedback, scans, period, actions]);
+
+  const periodLabel =
+    period === "all"
+      ? "Todo el historial"
+      : `Ãšltimos ${period} dÃ­as`;
+
+  const diagnosis = useMemo(() => {
+    if (analytics.feedbackTotal === 0) {
+      return {
+        type: "empty" as const,
+        eyebrow: "SIN DATOS",
+        title: "TodavÃ­a no hay suficiente informaciÃ³n.",
+        description:
+          "Cuando empiecen a llegar valoraciones reales, GuestTap podrÃ¡ empezar a interpretar la experiencia.",
+      };
+    }
+
+    if (analytics.attentionSignals.length > 0) {
+      const signal = analytics.attentionSignals[0];
+
+      return {
+        type: "attention" as const,
+        eyebrow: "QUÃ‰ MERECE ATENCIÃ“N",
+        title: `${signal.title} merece una revisiÃ³n.`,
+        description:
+          signal.criticalCount >= 2
+            ? `${signal.count} menciones estÃ¡n relacionadas con este tema y ${signal.criticalCount} corresponden a valoraciones de 1 o 2 estrellas.`
+            : `El tema aparece varias veces y presenta una valoraciÃ³n suficientemente baja como para justificar una revisiÃ³n.`,
+      };
+    }
+
+    if (analytics.intelligenceSignals.length > 0) {
+      const signal = analytics.intelligenceSignals[0];
+
+      return {
+        type: "signal" as const,
+        eyebrow: "SEÃ‘AL PARA OBSERVAR",
+        title: `${signal.title} estÃ¡ empezando a aparecer.`,
+        description:
+          signal.count === 1
+            ? "Hay una menciÃ³n relacionada, pero todavÃ­a no alcanza para considerarla un problema."
+            : `${signal.count} menciones relacionadas muestran una seÃ±al emergente, aunque todavÃ­a no hay suficiente evidencia para llamarla un problema recurrente.`,
+      };
+    }
+
+    if (
+      analytics.feedbackTotal < 5 ||
+      analytics.comments.length === 0
+    ) {
+      return {
+        type: "insufficient" as const,
+        eyebrow: "EVIDENCIA INSUFICIENTE",
+        title: "GuestTap todavÃ­a estÃ¡ aprendiendo de tus clientes.",
+        description:
+          "Hay valoraciones, pero todavÃ­a no existe suficiente informaciÃ³n cualitativa para identificar patrones confiables.",
+      };
+    }
+
+    return {
+      type: "healthy" as const,
+      eyebrow: "ESTADO ACTUAL",
+      title: "No aparece un problema dominante.",
+      description:
+        "La informaciÃ³n disponible no muestra un patrÃ³n suficientemente fuerte como para recomendar una intervenciÃ³n especÃ­fica.",
+    };
+  }, [analytics]);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-[#F5F7F6] text-[#173F53]">
+        <div className="mx-auto max-w-[1220px] px-5 py-8 sm:px-8">
+          <div className="h-16 animate-pulse rounded-2xl bg-white" />
+          <div className="mt-8 h-12 w-2/3 animate-pulse rounded-xl bg-white" />
+          <div className="mt-4 h-5 w-1/2 animate-pulse rounded-xl bg-white" />
+          <div className="mt-8 h-64 animate-pulse rounded-[26px] bg-white" />
+        </div>
+      </main>
+    );
+  }
+
+  if (error && !business) {
+    return (
+      <main className="min-h-screen bg-[#F5F7F6] text-[#173F53]">
+        <div className="mx-auto max-w-2xl px-5 py-20">
+          <div className="rounded-3xl border border-[#E0E6E5] bg-white p-8">
+            <p className="text-sm font-semibold text-[#C95743]">
+              No pudimos cargar Analytics
+            </p>
+            <p className="mt-2 text-base leading-7 text-[#536B76]">
+              {error}
+            </p>
+            <button
+              onClick={cargarAnalytics}
+              className="mt-6 rounded-xl bg-[#173F53] px-5 py-3 text-sm font-semibold text-white"
+            >
+              Intentar nuevamente
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <main className="min-h-screen bg-[#F5F7F6] text-[#173F53]">
+      {/* HEADER */}
+      <header className="border-b border-[#DCE4E3] bg-white">
+        <div className="mx-auto flex max-w-[1220px] items-center justify-between px-5 py-4 sm:px-8">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-[#DCE4E3] bg-white">
+              {business?.logo_url ? (
+                <img
+                  src={business.logo_url}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="text-lg font-bold text-[#173F53]">
+                  G
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6D828B]">
+                GuestTap
+              </p>
+              <p className="text-[17px] font-bold tracking-tight text-[#173F53]">
+                Experiencia
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={refrescar}
+              disabled={refreshing}
+              className="rounded-xl border border-[#D7E0DF] bg-white px-4 py-2.5 text-sm font-semibold text-[#173F53] transition hover:bg-[#F5F7F6] disabled:opacity-50"
+            >
+              {refreshing ? "Actualizando..." : "Actualizar"}
+            </button>
+
+            <Link
+              href="/panel"
+              className="rounded-xl border border-[#D7E0DF] bg-white px-4 py-2.5 text-sm font-semibold text-[#173F53] transition hover:bg-[#F5F7F6]"
+            >
+              â† Volver al panel
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-[1220px] px-5 pb-20 sm:px-8">
+        {/* HERO */}
+        <section className="pt-10 sm:pt-12">
+          <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
+            <div className="max-w-[700px]">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-[#13B5A2]" />
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#47707E]">
+                  {business?.name}
+                </p>
+              </div>
+
+              <h1 className="mt-4 text-[40px] font-bold leading-[1.04] tracking-[-0.035em] text-[#173F53] sm:text-[48px]">
+                La experiencia de tus clientes.
+              </h1>
+
+              <p className="mt-5 max-w-[650px] text-[16px] leading-7 text-[#536B76]">
+                Una lectura clara de quÃ© estÃ¡ funcionando, quÃ© merece
+                atenciÃ³n y quÃ© estÃ¡ cambiando en tu negocio.
+              </p>
+            </div>
+
+            <div className="shrink-0">
+              <div className="inline-flex rounded-2xl border border-[#D7E0DF] bg-white p-1 shadow-sm">
+                {(["7", "30", "90", "all"] as PeriodKey[]).map(
+                  (item) => (
+                    <button
+                      key={item}
+                      onClick={() => setPeriod(item)}
+                      className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                        period === item
+                          ? "bg-[#173F53] text-white"
+                          : "text-[#536B76] hover:bg-[#F1F5F4]"
+                      }`}
+                    >
+                      {item === "all" ? "Todo" : `${item} dÃ­as`}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <p className="mt-2 text-right text-xs text-[#6D828B]">
+                {periodLabel}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* DIAGNOSIS */}
+        <section className="mt-9 overflow-hidden rounded-[26px] border border-[#D7E1E0] bg-white shadow-[0_8px_30px_rgba(23,63,83,0.04)]">
+          <div className="grid lg:grid-cols-[1.6fr_0.9fr]">
+            <div className="p-7 sm:p-9">
+              <div className="flex gap-5">
+                <div
+                  className={`mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
+                    diagnosis.type === "attention"
+                      ? "bg-[#FFF0EC] text-[#C95743]"
+                      : diagnosis.type === "signal"
+                      ? "bg-[#FFF8EB] text-[#A56B00]"
+                      : "bg-[#EAF7F4] text-[#078B78]"
+                  }`}
+                >
+                  <Icon
+                    name={
+                      diagnosis.type === "attention"
+                        ? "alert"
+                        : diagnosis.type === "signal"
+                        ? "light"
+                        : "check"
+                    }
+                    size={22}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                      {diagnosis.eyebrow}
+                    </p>
+
+                    {diagnosis.type === "attention" && (
+                      <StatusBadge tone="critical">
+                        Requiere revisiÃ³n
+                      </StatusBadge>
+                    )}
+
+                    {diagnosis.type === "signal" && (
+                      <StatusBadge tone="warning">
+                        Evidencia inicial
+                      </StatusBadge>
+                    )}
+
+                    {diagnosis.type === "healthy" && (
+                      <StatusBadge tone="positive">
+                        Sin problema dominante
+                      </StatusBadge>
+                    )}
+                  </div>
+
+                  <h2 className="mt-3 text-[25px] font-bold leading-tight tracking-[-0.02em] text-[#173F53] sm:text-[28px]">
+                    {diagnosis.title}
+                  </h2>
+
+                  <p className="mt-3 max-w-[650px] text-[15px] leading-7 text-[#536B76]">
+                    {diagnosis.description}
+                  </p>
+
+                  {analytics.topActionSignal &&
+                    diagnosis.type === "attention" && (
+                      <button
+                        onClick={() =>
+                          crearAccion(analytics.topActionSignal!)
+                        }
+                        disabled={
+                          actionLoading ===
+                          analytics.topActionSignal.key
+                        }
+                        className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[#173F53] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#214F65] disabled:opacity-50"
+                      >
+                        {actionLoading ===
+                        analytics.topActionSignal.key
+                          ? "Creando..."
+                          : "Crear acciÃ³n de mejora"}
+                        <Icon name="arrow" size={16} />
+                      </button>
+                    )}
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-[#E1E7E6] bg-[#F8FAF9] p-7 lg:border-l lg:border-t-0 sm:p-9">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                Evidencia del perÃ­odo
+              </p>
+
+              <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-7">
+                <div>
+                  <p className="text-[29px] font-bold tracking-tight text-[#173F53]">
+                    {formatNumber(analytics.feedbackTotal)}
+                  </p>
+                  <p className="mt-1 text-[13px] leading-5 text-[#607781]">
+                    valoraciones
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[29px] font-bold tracking-tight text-[#173F53]">
+                    {formatNumber(analytics.allComments.length)}
+                  </p>
+                  <p className="mt-1 text-[13px] leading-5 text-[#607781]">
+                    comentarios
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[29px] font-bold tracking-tight text-[#173F53]">
+                    {formatNumber(analytics.criticalCount)}
+                  </p>
+                  <p className="mt-1 text-[13px] leading-5 text-[#607781]">
+                    valoraciones de 1â€“2 â˜…
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[29px] font-bold tracking-tight text-[#173F53]">
+                    {formatNumber(
+                      analytics.intelligenceSignals.length
+                    )}
+                  </p>
+                  <p className="mt-1 text-[13px] leading-5 text-[#607781]">
+                    temas detectados
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SATISFACTION + COMPARISON */}
+        <section className="mt-5 grid gap-5 lg:grid-cols-[1.55fr_0.85fr]">
+          <div className="rounded-[26px] border border-[#D7E1E0] bg-white p-7 shadow-[0_8px_30px_rgba(23,63,83,0.03)] sm:p-8">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                  SatisfacciÃ³n
+                </p>
+
+                <h2 className="mt-2 text-[22px] font-bold tracking-tight text-[#173F53]">
+                  CÃ³mo estÃ¡n viviendo la experiencia.
+                </h2>
+
+                <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                  La percepciÃ³n que dejaron tus clientes durante el
+                  perÃ­odo seleccionado.
+                </p>
+              </div>
+
+              <div className="flex items-end gap-3 sm:text-right">
+                <div>
+                  <p className="text-[43px] font-bold leading-none tracking-[-0.04em] text-[#173F53]">
+                    {analytics.averageRating !== null
+                      ? analytics.averageRating.toFixed(1)
+                      : "â€”"}
+                  </p>
+                </div>
+
+                <div className="pb-1">
+                  <Stars
+                    rating={analytics.averageRating ?? 0}
+                  />
+                  <p className="mt-1 text-xs text-[#607781]">
+                    sobre 5 estrellas
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8 grid overflow-hidden rounded-2xl border border-[#D7E1E0] sm:grid-cols-3">
+              <div className="p-5">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#58727D]">
+                  Positivas
+                </p>
+
+                <p className="mt-2 text-[28px] font-bold text-[#079A84]">
+                  {analytics.positivePercentage}%
+                </p>
+
+                <p className="mt-1 text-[13px] text-[#607781]">
+                  4 y 5 estrellas
+                </p>
+              </div>
+
+              <div className="border-t border-[#D7E1E0] p-5 sm:border-l sm:border-t-0">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#58727D]">
+                  Neutras
+                </p>
+
+                <p className="mt-2 text-[28px] font-bold text-[#55717D]">
+                  {analytics.neutralPercentage}%
+                </p>
+
+                <p className="mt-1 text-[13px] text-[#607781]">
+                  3 estrellas
+                </p>
+              </div>
+
+              <div className="border-t border-[#D7E1E0] p-5 sm:border-l sm:border-t-0">
+                <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#58727D]">
+                  AtenciÃ³n
+                </p>
+
+                <p className="mt-2 text-[28px] font-bold text-[#D85D47]">
+                  {analytics.criticalPercentage}%
+                </p>
+
+                <p className="mt-1 text-[13px] text-[#607781]">
+                  1 y 2 estrellas
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[26px] border border-[#D7E1E0] bg-white p-7 shadow-[0_8px_30px_rgba(23,63,83,0.03)] sm:p-8">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+              ComparaciÃ³n
+            </p>
+
+            <h2 className="mt-2 text-[22px] font-bold tracking-tight text-[#173F53]">
+              Frente al perÃ­odo anterior.
+            </h2>
+
+            {analytics.comparison.available ? (
+              <div className="mt-7">
+                <div
+                  className={`text-[38px] font-bold tracking-tight ${
+                    analytics.comparison.direction === "up"
+                      ? "text-[#078B78]"
+                      : analytics.comparison.direction ===
+                        "down"
+                      ? "text-[#D85D47]"
+                      : "text-[#173F53]"
+                  }`}
+                >
+                  {analytics.comparison.change! > 0 ? "+" : ""}
+                  {analytics.comparison.change!.toFixed(1)}
+                </div>
+
+                <p className="mt-1 text-[14px] font-semibold text-[#173F53]">
+                  {analytics.comparison.direction === "up"
+                    ? "La satisfacciÃ³n mejorÃ³."
+                    : analytics.comparison.direction === "down"
+                    ? "La satisfacciÃ³n empeorÃ³."
+                    : "La satisfacciÃ³n se mantiene estable."}
+                </p>
+
+                <p className="mt-3 text-[13px] leading-6 text-[#607781]">
+                  {analytics.previousAverage!.toFixed(1)} â˜… antes
+                  {" Â· "}
+                  {analytics.averageRating!.toFixed(1)} â˜… ahora.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-7 rounded-2xl bg-[#F6F8F7] p-5">
+                <p className="text-[15px] font-bold text-[#173F53]">
+                  TodavÃ­a no podemos comparar.
+                </p>
+
+                <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                  Necesitamos al menos 5 valoraciones en ambos
+                  perÃ­odos para mostrar un cambio con cierta
+                  confianza.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* EVOLUTION */}
+        <section className="mt-5 rounded-[26px] border border-[#D7E1E0] bg-white p-7 shadow-[0_8px_30px_rgba(23,63,83,0.03)] sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                EvoluciÃ³n
+              </p>
+
+              <h2 className="mt-2 text-[22px] font-bold tracking-tight text-[#173F53]">
+                Â¿La experiencia estÃ¡ mejorando o empeorando?
+              </h2>
+
+              <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                Solo mostramos dÃ­as en los que realmente hubo
+                valoraciones.
+              </p>
+            </div>
+
+            {analytics.trend === "positive" && (
+              <StatusBadge tone="positive">
+                Tendencia positiva
+              </StatusBadge>
+            )}
+
+            {analytics.trend === "negative" && (
+              <StatusBadge tone="critical">
+                Tendencia negativa
+              </StatusBadge>
+            )}
+
+            {analytics.trend === "stable" && (
+              <StatusBadge tone="neutral">
+                Experiencia estable
+              </StatusBadge>
+            )}
+
+            {analytics.trend === "insufficient" && (
+              <StatusBadge tone="neutral">
+                TodavÃ­a no hay tendencia suficiente
+              </StatusBadge>
+            )}
+          </div>
+
+          {analytics.dailySatisfaction.length >= 2 ? (
+            <div className="mt-7 overflow-hidden rounded-2xl bg-[#F7F9F8] p-5 sm:p-7">
+              <div className="relative h-[260px]">
+                <div className="absolute inset-x-0 top-0 flex items-center justify-between text-xs text-[#70848D]">
+                  <span>5 â˜…</span>
+                  <span>1 â˜…</span>
+                </div>
+
+                <div className="absolute inset-x-12 top-7 bottom-10">
+                  {[5, 4, 3, 2, 1].map((value) => (
+                    <div
+                      key={value}
+                      className="absolute left-0 right-0 border-t border-[#DFE7E5]"
+                      style={{
+                        top: `${((5 - value) / 4) * 100}%`,
+                      }}
+                    />
+                  ))}
+
+                  <svg
+                    viewBox="0 0 1000 220"
+                    preserveAspectRatio="none"
+                    className="absolute inset-0 h-full w-full overflow-visible"
+                  >
+                    <polyline
+                      points={analytics.dailySatisfaction
+                        .map((item, index) => {
+                          const x =
+                            analytics.dailySatisfaction.length ===
+                            1
+                              ? 50
+                              : (index /
+                                  (analytics.dailySatisfaction
+                                    .length -
+                                    1)) *
+                                100;
+
+                          const y =
+                            ((5 - item.average) / 4) * 100;
+
+                          return `${x * 10},${y * 2.2}`;
+                        })
+                        .join(" ")}
+                      fill="none"
+                      stroke="#13B5A2"
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+
+                    {analytics.dailySatisfaction.map(
+                      (item, index) => {
+                        const x =
+                          analytics.dailySatisfaction.length ===
+                          1
+                            ? 50
+                            : (index /
+                                (analytics.dailySatisfaction
+                                  .length -
+                                  1)) *
+                              100;
+
+                        const y =
+                          ((5 - item.average) / 4) * 100;
+
+                        return (
+                          <circle
+                            key={`${item.label}-${index}`}
+                            cx={x * 10}
+                            cy={y * 2.2}
+                            r="6"
+                            fill="white"
+                            stroke="#13B5A2"
+                            strokeWidth="3"
+                            vectorEffect="non-scaling-stroke"
+                          />
+                        );
+                      }
+                    )}
+                  </svg>
+
+                  <div className="absolute inset-x-0 -bottom-8 flex justify-between gap-2">
+                    {analytics.dailySatisfaction.map(
+                      (item, index) => (
+                        <div
+                          key={`${item.label}-label`}
+                          className="min-w-0 text-center"
+                        >
+                          <p className="text-[11px] font-semibold text-[#607781]">
+                            {item.label}
+                          </p>
+
+                          <p className="mt-1 text-[11px] text-[#84959C]">
+                            {item.average.toFixed(1)} Â·{" "}
+                            {item.count}
+                          </p>
+                        </div>
+                      )
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <p className="mt-14 text-xs leading-5 text-[#70848D]">
+                Cada punto representa un dÃ­a con valoraciones.
+                No mostramos dÃ­as sin actividad como si fueran
+                datos.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-7 rounded-2xl bg-[#F7F9F8] p-8 text-center">
+              <p className="text-[15px] font-bold text-[#173F53]">
+                TodavÃ­a no hay suficientes dÃ­as con actividad.
+              </p>
+
+              <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                Necesitamos mÃ¡s valoraciones distribuidas en el
+                tiempo para interpretar una evoluciÃ³n.
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* WHAT WORKS / WHAT NEEDS ATTENTION */}
+        <section className="mt-5 grid gap-5 lg:grid-cols-2">
+          <div className="rounded-[26px] border border-[#D7E1E0] bg-white p-7 sm:p-8">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#EAF7F4] text-[#078B78]">
+                <Icon name="check" size={21} />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                  Lo que funciona
+                </p>
+
+                <h2 className="mt-2 text-[22px] font-bold tracking-tight text-[#173F53]">
+                  QuÃ© estÃ¡n valorando bien.
+                </h2>
+              </div>
+            </div>
+
+            {analytics.strengthSignals.length > 0 ? (
+              <div className="mt-7 space-y-3">
+                {analytics.strengthSignals
+                  .slice(0, 3)
+                  .map((signal) => (
+                    <div
+                      key={signal.key}
+                      className="rounded-2xl border border-[#DCE8E5] bg-[#F8FBFA] p-5"
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-[16px] font-bold text-[#173F53]">
+                            {signal.title}
+                          </p>
+
+                          <p className="mt-1 text-[13px] leading-5 text-[#607781]">
+                            {signal.count}{" "}
+                            {signal.count === 1
+                              ? "menciÃ³n"
+                              : "menciones"}{" "}
+                            con valoraciÃ³n promedio de{" "}
+                            {signal.averageRating.toFixed(1)} â˜….
+                          </p>
+                        </div>
+
+                        <StatusBadge tone="positive">
+                          Fortaleza
+                        </StatusBadge>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="mt-7 rounded-2xl bg-[#F7F9F8] p-5">
+                <p className="text-[15px] font-bold text-[#173F53]">
+                  TodavÃ­a no hay una fortaleza clara.
+                </p>
+
+                <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                  Necesitamos mÃ¡s comentarios relacionados con un
+                  mismo tema para identificar quÃ© parte de la
+                  experiencia estÃ¡ funcionando especialmente bien.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-[26px] border border-[#D7E1E0] bg-white p-7 sm:p-8">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#FFF1ED] text-[#C95743]">
+                <Icon name="alert" size={21} />
+              </div>
+
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                  Oportunidad
+                </p>
+
+                <h2 className="mt-2 text-[22px] font-bold tracking-tight text-[#173F53]">
+                  QuÃ© merece seguimiento.
+                </h2>
+              </div>
+            </div>
+
+            {analytics.intelligenceSignals.filter(
+              (signal) => signal.status !== "strength"
+            ).length > 0 ? (
+              <div className="mt-7 space-y-3">
+                {analytics.intelligenceSignals
+                  .filter(
+                    (signal) => signal.status !== "strength"
+                  )
+                  .slice(0, 3)
+                  .map((signal) => (
+                    <div
+                      key={signal.key}
+                      className={`rounded-2xl border p-5 ${
+                        signal.status === "attention"
+                          ? "border-[#F0C9C1] bg-[#FFF8F6]"
+                          : "border-[#E0E7E6] bg-[#F8FAF9]"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-[16px] font-bold text-[#173F53]">
+                              {signal.title}
+                            </p>
+
+                            {signal.status ===
+                              "attention" && (
+                              <StatusBadge tone="critical">
+                                AtenciÃ³n
+                              </StatusBadge>
+                            )}
+
+                            {signal.status === "emerging" && (
+                              <StatusBadge tone="warning">
+                                SeÃ±al emergente
+                              </StatusBadge>
+                            )}
+
+                            {signal.status === "signal" && (
+                              <StatusBadge tone="neutral">
+                                SeÃ±al inicial
+                              </StatusBadge>
+                            )}
+                          </div>
+
+                          <p className="mt-2 text-[13px] leading-5 text-[#607781]">
+                            {signal.count}{" "}
+                            {signal.count === 1
+                              ? "menciÃ³n"
+                              : "menciones"}
+                            {" Â· "}
+                            {signal.criticalCount} crÃ­ticas
+                            {" Â· "}
+                            confianza {signal.confidence}.
+                          </p>
+                        </div>
+
+                        {signal.status === "attention" && (
+                          <button
+                            onClick={() =>
+                              crearAccion(signal)
+                            }
+                            disabled={
+                              actionLoading === signal.key
+                            }
+                            className="shrink-0 rounded-xl bg-[#173F53] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#214F65] disabled:opacity-50"
+                          >
+                            {actionLoading === signal.key
+                              ? "..."
+                              : "Crear acciÃ³n"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="mt-7 rounded-2xl bg-[#F7F9F8] p-5">
+                <p className="text-[15px] font-bold text-[#173F53]">
+                  No hay una seÃ±al que requiera seguimiento.
+                </p>
+
+                <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                  GuestTap no convierte una observaciÃ³n aislada en
+                  una recomendaciÃ³n.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* INTELLIGENCE */}
+        <section className="mt-5 overflow-hidden rounded-[26px] border border-[#CFE2DE] bg-[#F1F9F7]">
+          <div className="border-b border-[#D5E7E3] p-7 sm:p-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#173F53] text-white">
+                    <Icon name="light" size={21} />
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#47707E]">
+                      GuestTap Intelligence
+                    </p>
+
+                    <h2 className="mt-1 text-[22px] font-bold tracking-tight text-[#173F53]">
+                      Lo que aparece detrÃ¡s de los comentarios.
+                    </h2>
+                  </div>
+                </div>
+
+                <p className="mt-4 max-w-[720px] text-[14px] leading-6 text-[#536B76]">
+                  Agrupamos comentarios relacionados para encontrar
+                  seÃ±ales. Una menciÃ³n aislada puede ser interesante,
+                  pero no se presenta automÃ¡ticamente como un
+                  problema.
+                </p>
+              </div>
+
+              <div className="text-sm font-semibold text-[#47707E]">
+                {analytics.intelligenceSignals.length}{" "}
+                {analytics.intelligenceSignals.length === 1
+                  ? "tema"
+                  : "temas"}{" "}
+                detectados
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-7">
+            {analytics.intelligenceSignals.length > 0 ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {analytics.intelligenceSignals.map((signal) => (
+                  <div
+                    key={signal.key}
+                    className="rounded-2xl border border-[#D7E5E2] bg-white p-6"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`h-2.5 w-2.5 rounded-full ${
+                              signal.status === "attention"
+                                ? "bg-[#D85D47]"
+                                : signal.status ===
+                                  "strength"
+                                ? "bg-[#13B5A2]"
+                                : "bg-[#8AA0A8]"
+                            }`}
+                          />
+
+                          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#58727D]">
+                            {signal.status === "attention"
+                              ? "AtenciÃ³n"
+                              : signal.status === "strength"
+                              ? "Fortaleza"
+                              : signal.status ===
+                                "emerging"
+                              ? "SeÃ±al emergente"
+                              : "MenciÃ³n aislada"}
+                          </p>
+                        </div>
+
+                        <h3 className="mt-2 text-[19px] font-bold text-[#173F53]">
+                          {signal.title}
+                        </h3>
+
+                        <p className="mt-2 text-[13px] leading-5 text-[#607781]">
+                          {signal.description}
+                        </p>
+                      </div>
+
+                      <StatusBadge
+                        tone={
+                          signal.status === "attention"
+                            ? "critical"
+                            : signal.status === "strength"
+                            ? "positive"
+                            : "neutral"
+                        }
+                      >
+                        {signal.count}{" "}
+                        {signal.count === 1
+                          ? "menciÃ³n"
+                          : "menciones"}
+                      </StatusBadge>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-3 gap-3 border-t border-[#E3EAE8] pt-5">
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#71858D]">
+                          ValoraciÃ³n
+                        </p>
+
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="text-[19px] font-bold text-[#173F53]">
+                            {signal.averageRating.toFixed(1)}
+                          </span>
+                          <Stars rating={signal.averageRating} />
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#71858D]">
+                          CrÃ­ticas
+                        </p>
+
+                        <p className="mt-2 text-[19px] font-bold text-[#C95743]">
+                          {signal.criticalCount}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#71858D]">
+                          Confianza
+                        </p>
+
+                        <p className="mt-2 text-[19px] font-bold capitalize text-[#173F53]">
+                          {signal.confidence}
+                        </p>
+                      </div>
+                    </div>
+
+                    {signal.evidence.length > 0 && (
+                      <div className="mt-5 rounded-2xl bg-[#F7F9F8] p-4">
+                        <p className="text-[11px] font-bold uppercase tracking-[0.13em] text-[#71858D]">
+                          Evidencia
+                        </p>
+
+                        <div className="mt-3 space-y-3">
+                          {signal.evidence
+                            .slice(0, 2)
+                            .map((item) => (
+                              <div
+                                key={item.id}
+                                className="flex items-start justify-between gap-4"
+                              >
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <Stars
+                                      rating={item.rating}
+                                    />
+
+                                    <span className="text-[11px] text-[#7A8C93]">
+                                      {formatDate(
+                                        item.created_at
+                                      )}
+                                    </span>
+                                  </div>
+
+                                  <p className="mt-1.5 text-[13px] leading-5 text-[#536B76]">
+                                    â€œ{item.message}â€
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {signal.status === "attention" && (
+                      <button
+                        onClick={() =>
+                          crearAccion(signal)
+                        }
+                        disabled={
+                          actionLoading === signal.key
+                        }
+                        className="mt-5 w-full rounded-xl border border-[#173F53] bg-white px-4 py-3 text-sm font-semibold text-[#173F53] transition hover:bg-[#173F53] hover:text-white disabled:opacity-50"
+                      >
+                        {actionLoading === signal.key
+                          ? "Creando acciÃ³n..."
+                          : "Convertir seÃ±al en acciÃ³n"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-[#D7E5E2] bg-white p-8 text-center">
+                <p className="text-[16px] font-bold text-[#173F53]">
+                  TodavÃ­a no encontramos temas con evidencia
+                  suficiente.
+                </p>
+
+                <p className="mx-auto mt-2 max-w-xl text-[14px] leading-6 text-[#607781]">
+                  Cuando haya mÃ¡s comentarios Ãºtiles, GuestTap podrÃ¡
+                  empezar a identificar patrones entre ellos.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="border-t border-[#D5E7E3] px-7 py-4 sm:px-8">
+            <p className="text-[12px] leading-5 text-[#61777F]">
+              Las seÃ±ales se construyen a partir de comentarios
+              disponibles y su valoraciÃ³n asociada. GuestTap no
+              convierte una coincidencia aislada en un diagnÃ³stico.
+            </p>
+          </div>
+        </section>
+
+        {/* ACTIONS */}
+        <section className="mt-5 rounded-[26px] border border-[#D7E1E0] bg-white p-7 sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                Mejora continua
+              </p>
+
+              <h2 className="mt-2 text-[22px] font-bold tracking-tight text-[#173F53]">
+                QuÃ© estÃ¡ haciendo el negocio al respecto.
+              </h2>
+
+              <p className="mt-2 max-w-2xl text-[14px] leading-6 text-[#607781]">
+                Las seÃ±ales importantes pueden convertirse en
+                acciones. AsÃ­ GuestTap puede medir quÃ© pasÃ³ despuÃ©s.
+              </p>
+            </div>
+
+            <span className="text-sm font-semibold text-[#607781]">
+              {analytics.activeActions.length}{" "}
+              {analytics.activeActions.length === 1
+                ? "acciÃ³n activa"
+                : "acciones activas"}
+            </span>
+          </div>
+
+          {analytics.activeActions.length > 0 ? (
+            <div className="mt-7 space-y-3">
+              {analytics.activeActions.map((action) => (
+                <div
+                  key={action.id}
+                  className="rounded-2xl border border-[#DCE5E4] bg-[#F9FAFA] p-5"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-[16px] font-bold text-[#173F53]">
+                          {action.title}
+                        </h3>
+
+                        <ActionStatus status={action.status} />
+                      </div>
+
+                      {action.description && (
+                        <p className="mt-2 max-w-2xl text-[13px] leading-6 text-[#607781]">
+                          {action.description}
+                        </p>
+                      )}
+
+                      <p className="mt-2 text-[12px] text-[#81929A]">
+                        Creada{" "}
+                        {formatLongDate(action.created_at)}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {action.status === "pending" && (
+                        <button
+                          onClick={() =>
+                            actualizarAccion(
+                              action,
+                              "in_progress"
+                            )
+                          }
+                          disabled={
+                            actionLoading === action.id
+                          }
+                          className="rounded-xl bg-[#173F53] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          Marcar en progreso
+                        </button>
+                      )}
+
+                      {action.status === "in_progress" && (
+                        <button
+                          onClick={() =>
+                            actualizarAccion(
+                              action,
+                              "resolved"
+                            )
+                          }
+                          disabled={
+                            actionLoading === action.id
+                          }
+                          className="rounded-xl bg-[#078B78] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          Marcar como resuelta
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-7 rounded-2xl bg-[#F7F9F8] p-6">
+              <p className="text-[15px] font-bold text-[#173F53]">
+                TodavÃ­a no hay acciones activas.
+              </p>
+
+              <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                Cuando GuestTap encuentre una seÃ±al suficientemente
+                fuerte, podÃ©s convertirla en una acciÃ³n y empezar a
+                medir quÃ© ocurriÃ³ despuÃ©s.
+              </p>
+            </div>
+          )}
+        </section>
+
+        {/* CUSTOMER VOICE */}
+        <section className="mt-5 rounded-[26px] border border-[#D7E1E0] bg-white">
+          <div className="border-b border-[#E0E7E6] p-7 sm:p-8">
+            <div className="flex items-end justify-between gap-5">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                  Voz del cliente
+                </p>
+
+                <h2 className="mt-2 text-[22px] font-bold tracking-tight text-[#173F53]">
+                  Lo que realmente dijeron.
+                </h2>
+
+                <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                  La evidencia detrÃ¡s de las seÃ±ales que muestra
+                  GuestTap.
+                </p>
+              </div>
+
+              <p className="hidden text-sm font-semibold text-[#607781] sm:block">
+                {analytics.allComments.length}{" "}
+                {analytics.allComments.length === 1
+                  ? "comentario"
+                  : "comentarios"}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-5 sm:p-7">
+            {analytics.allComments.length > 0 ? (
+              <div className="grid gap-4 lg:grid-cols-2">
+                {analytics.allComments
+                  .slice(0, 8)
+                  .map((item) => (
+                    <div
+                      key={item.id}
+                      className={`rounded-2xl border p-5 ${
+                        item.rating <= 2
+                          ? "border-[#F0D0C9] bg-[#FFF9F7]"
+                          : "border-[#DCE5E4] bg-white"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <Stars rating={item.rating} />
+
+                          <span
+                            className={`text-xs font-semibold ${
+                              item.rating <= 2
+                                ? "text-[#C95743]"
+                                : "text-[#078B78]"
+                            }`}
+                          >
+                            {item.rating >= 4
+                              ? "Positiva"
+                              : item.rating === 3
+                              ? "Neutral"
+                              : "CrÃ­tica"}
+                          </span>
+                        </div>
+
+                        <span className="text-[12px] text-[#7A8C93]">
+                          {formatDate(item.created_at)}
+                        </span>
+                      </div>
+
+                      <p className="mt-4 text-[15px] leading-7 text-[#405B67]">
+                        â€œ{item.message}â€
+                      </p>
+
+                      <div className="mt-4 border-t border-[#E4E9E8] pt-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.13em] text-[#71858D]">
+                          ValoraciÃ³n {item.rating}/5
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl bg-[#F7F9F8] p-7 text-center">
+                <p className="text-[15px] font-bold text-[#173F53]">
+                  TodavÃ­a no hay comentarios Ãºtiles.
+                </p>
+
+                <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                  Cuando los clientes dejen comentarios con contenido,
+                  aparecerÃ¡n acÃ¡ y podrÃ¡n alimentar la inteligencia
+                  de GuestTap.
+                </p>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* PUBLIC REPUTATION */}
+        <section className="mt-5 overflow-hidden rounded-[26px] border border-[#D7E1E0] bg-white">
+          <div className="grid lg:grid-cols-[1.35fr_1fr]">
+            <div className="p-7 sm:p-8">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                ReputaciÃ³n pÃºblica
+              </p>
+
+              <h2 className="mt-2 text-[25px] font-bold tracking-tight text-[#173F53]">
+                De la experiencia a Google.
+              </h2>
+
+              <p className="mt-3 max-w-[650px] text-[14px] leading-7 text-[#607781]">
+                GuestTap entiende primero la experiencia de forma
+                privada. Cuando una experiencia es buena, puede
+                convertirse en una oportunidad para fortalecer la
+                reputaciÃ³n pÃºblica del negocio.
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <div className="flex items-center gap-3 rounded-2xl border border-[#DCE5E4] bg-white px-4 py-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F5F7F6] text-[#173F53]">
+                    <Icon name="google" size={18} />
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-[#173F53]">
+                      Google
+                    </p>
+
+                    <p className="text-xs text-[#71858D]">
+                      Perfil configurado
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 rounded-2xl border border-[#DCE5E4] bg-white px-4 py-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAF7F4] text-[#078B78]">
+                    <Icon name="activity" size={18} />
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-bold text-[#173F53]">
+                      Experiencia privada
+                    </p>
+
+                    <p className="text-xs text-[#71858D]">
+                      {formatNumber(
+                        analytics.feedbackTotal
+                      )}{" "}
+                      respuestas
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6">
+                <p className="text-[13px] leading-6 text-[#607781]">
+                  La integraciÃ³n de Google debe traer datos reales
+                  del perfil para que podamos mostrar evoluciÃ³n,
+                  nuevas reseÃ±as y diferencias entre experiencia
+                  privada y reputaciÃ³n pÃºblica.
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-[#E0E7E6] bg-[#F8FAF9] p-7 sm:p-8 lg:border-l lg:border-t-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                QuÃ© deberÃ­a hacer el dueÃ±o
+              </p>
+
+              <div className="mt-6 space-y-5">
+                <div className="flex gap-4">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-bold text-[#173F53]">
+                    01
+                  </span>
+
+                  <div>
+                    <p className="text-[15px] font-bold text-[#173F53]">
+                      Entender
+                    </p>
+
+                    <p className="mt-1 text-[13px] leading-5 text-[#607781]">
+                      Revisar quÃ© estÃ¡n experimentando los clientes.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-bold text-[#173F53]">
+                    02
+                  </span>
+
+                  <div>
+                    <p className="text-[15px] font-bold text-[#173F53]">
+                      Mejorar
+                    </p>
+
+                    <p className="mt-1 text-[13px] leading-5 text-[#607781]">
+                      Actuar solamente sobre seÃ±ales que tengan
+                      evidencia suficiente.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-bold text-[#173F53]">
+                    03
+                  </span>
+
+                  <div>
+                    <p className="text-[15px] font-bold text-[#173F53]">
+                      Medir
+                    </p>
+
+                    <p className="mt-1 text-[13px] leading-5 text-[#607781]">
+                      Comprobar si la experiencia cambia despuÃ©s de
+                      una acciÃ³n.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-xs font-bold text-[#173F53]">
+                    04
+                  </span>
+
+                  <div>
+                    <p className="text-[15px] font-bold text-[#173F53]">
+                      Fortalecer
+                    </p>
+
+                    <p className="mt-1 text-[13px] leading-5 text-[#607781]">
+                      Convertir buenas experiencias en reputaciÃ³n
+                      pÃºblica.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SYSTEM ACTIVITY */}
+        <section className="mt-8">
+          <div className="flex items-end justify-between gap-5">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#58727D]">
+                Actividad de GuestTap
+              </p>
+
+              <h2 className="mt-2 text-[21px] font-bold tracking-tight text-[#173F53]">
+                CÃ³mo estÃ¡ funcionando el sistema.
+              </h2>
+
+              <p className="mt-2 text-[14px] leading-6 text-[#607781]">
+                Estos datos describen la actividad de GuestTap, no la
+                calidad del negocio.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-[24px] border border-[#D7E1E0] bg-white">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4">
+              <div className="border-b border-[#E0E7E6] p-6 sm:border-r lg:border-b-0">
+                <div className="flex items-center gap-2 text-[#58727D]">
+                  <Icon name="scan" size={17} />
+                  <span className="text-[12px] font-semibold">
+                    Interacciones
+                  </span>
+                </div>
+
+                <p className="mt-4 text-[29px] font-bold tracking-tight text-[#173F53]">
+                  {formatNumber(analytics.scansTotal)}
+                </p>
+
+                <p className="mt-1 text-[13px] text-[#71858D]">
+                  escaneos en el perÃ­odo
+                </p>
+              </div>
+
+              <div className="border-b border-[#E0E7E6] p-6 lg:border-r lg:border-b-0">
+                <div className="flex items-center gap-2 text-[#078B78]">
+                  <Icon name="activity" size={17} />
+                  <span className="text-[12px] font-semibold">
+                    Respuestas
+                  </span>
+                </div>
+
+                <p className="mt-4 text-[29px] font-bold tracking-tight text-[#173F53]">
+                  {formatNumber(analytics.feedbackTotal)}
+                </p>
+
+                <p className="mt-1 text-[13px] text-[#71858D]">
+                  valoraciones capturadas
+                </p>
+              </div>
+
+              <div className="border-b border-[#E0E7E6] p-6 sm:border-r sm:border-b-0">
+                <div className="flex items-center gap-2 text-[#58727D]">
+                  <Icon name="trend" size={17} />
+                  <span className="text-[12px] font-semibold">
+                    ConversiÃ³n
+                  </span>
+                </div>
+
+                <p className="mt-4 text-[29px] font-bold tracking-tight text-[#173F53]">
+                  {analytics.conversion}%
+                </p>
+
+                <p className="mt-1 text-[13px] text-[#71858D]">
+                  escaneo â†’ valoraciÃ³n atribuible
+                </p>
+              </div>
+
+              <div className="p-6">
+                <div className="flex items-center gap-2 text-[#58727D]">
+                  <Icon name="clock" size={17} />
+                  <span className="text-[12px] font-semibold">
+                    Comentarios
+                  </span>
+                </div>
+
+                <p className="mt-4 text-[29px] font-bold tracking-tight text-[#173F53]">
+                  {formatNumber(
+                    analytics.allComments.length
+                  )}
+                </p>
+
+                <p className="mt-1 text-[13px] text-[#71858D]">
+                  respuestas con texto
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t border-[#E0E7E6] p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#58727D]">
+                    Canales
+                  </p>
+
+                  <p className="mt-1 text-[15px] font-semibold text-[#173F53]">
+                    CÃ³mo llegan las interacciones.
+                  </p>
+                </div>
+
+                <div className="flex gap-8">
+                  <div>
+                    <p className="text-[12px] text-[#71858D]">
+                      QR
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-[#173F53]">
+                      {formatNumber(analytics.qrScans)}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-[12px] text-[#71858D]">
+                      NFC
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-[#173F53]">
+                      {formatNumber(analytics.nfcScans)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-[#607781]">
+                    <span>QR</span>
+                    <span>
+                      {analytics.scansTotal > 0
+                        ? Math.round(
+                            (analytics.qrScans /
+                              analytics.scansTotal) *
+                              100
+                          )
+                        : 0}
+                      %
+                    </span>
+                  </div>
+
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E5ECEA]">
+                    <div
+                      className="h-full rounded-full bg-[#173F53]"
+                      style={{
+                        width:
+                          analytics.scansTotal > 0
+                            ? `${
+                                (analytics.qrScans /
+                                  analytics.scansTotal) *
+                                100
+                              }%`
+                            : "0%",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-xs font-semibold text-[#607781]">
+                    <span>NFC</span>
+                    <span>
+                      {analytics.scansTotal > 0
+                        ? Math.round(
+                            (analytics.nfcScans /
+                              analytics.scansTotal) *
+                              100
+                          )
+                        : 0}
+                      %
+                    </span>
+                  </div>
+
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#E5ECEA]">
+                    <div
+                      className="h-full rounded-full bg-[#13B5A2]"
+                      style={{
+                        width:
+                          analytics.scansTotal > 0
+                            ? `${
+                                (analytics.nfcScans /
+                                  analytics.scansTotal) *
+                                100
+                              }%`
+                            : "0%",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* FOOTNOTE */}
+        <section className="mt-7 border-t border-[#D7E1E0] pt-5">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 text-[#58727D]">
+              <Icon name="light" size={16} />
+            </div>
+
+            <p className="max-w-4xl text-[12px] leading-6 text-[#6C818A]">
+              GuestTap prioriza evidencia sobre ruido. Las seÃ±ales
+              dependen de la cantidad, calidad y valoraciÃ³n de los
+              comentarios disponibles. Un clic hacia Google tampoco
+              se considera una reseÃ±a publicada: esa mÃ©trica requerirÃ¡
+              datos reales del perfil pÃºblico.
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function buildActionDescription(
+  signal: IntelligenceSignal
+) {
+  if (signal.status === "attention") {
+    if (signal.criticalCount >= 2) {
+      return `Revisar ${signal.title.toLowerCase()}. GuestTap encontrÃ³ ${
+        signal.count
+      } menciones relacionadas, de las cuales ${
+        signal.criticalCount
+      } corresponden a valoraciones de 1 o 2 estrellas.`;
+    }
+
+    return `Revisar ${signal.title.toLowerCase()}. El tema presenta suficiente evidencia negativa para justificar una intervenciÃ³n.`;
+  }
+
+  return `Observar ${signal.title.toLowerCase()} y revisar si aparecen nuevas menciones en las prÃ³ximas respuestas.`;
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import { supabase } from "../../../lib/supabase";
 
 type Business = {
@@ -10,6 +11,7 @@ type Business = {
   instagram_url: string | null;
   whatsapp: string | null;
   logo_url: string | null;
+  business_type: string | null;
 };
 
 function Icon({
@@ -105,6 +107,7 @@ export default function ConfiguracionPage() {
   const [business, setBusiness] = useState<Business | null>(null);
 
   const [name, setName] = useState("");
+  const [businessType, setBusinessType] = useState("other");
   const [googleUrl, setGoogleUrl] = useState("");
   const [instagramUrl, setInstagramUrl] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
@@ -144,9 +147,11 @@ export default function ConfiguracionPage() {
 
       if (businessUserError || !businessUser) {
         console.error(businessUserError);
+
         setError(
           "No encontramos un negocio asociado a tu cuenta."
         );
+
         setLoading(false);
         return;
       }
@@ -155,14 +160,16 @@ export default function ConfiguracionPage() {
         await supabase
           .from("businesses")
           .select(
-            "id, name, google_url, instagram_url, whatsapp, logo_url"
+            "id, name, google_url, instagram_url, whatsapp, logo_url, business_type"
           )
           .eq("id", businessUser.business_id)
           .single();
 
       if (businessError || !businessData) {
         console.error(businessError);
+
         setError("No pudimos cargar la configuración.");
+
         setLoading(false);
         return;
       }
@@ -170,6 +177,7 @@ export default function ConfiguracionPage() {
       setBusiness(businessData);
 
       setName(businessData.name || "");
+      setBusinessType(businessData.business_type || "other");
       setGoogleUrl(businessData.google_url || "");
       setInstagramUrl(businessData.instagram_url || "");
       setWhatsapp(businessData.whatsapp || "");
@@ -178,9 +186,11 @@ export default function ConfiguracionPage() {
       setLoading(false);
     } catch (error) {
       console.error(error);
+
       setError(
         "Ocurrió un error al cargar la configuración."
       );
+
       setLoading(false);
     }
   }
@@ -214,6 +224,7 @@ export default function ConfiguracionPage() {
           },
           body: JSON.stringify({
             name: name.trim(),
+            business_type: businessType,
             google_url: googleUrl.trim(),
             instagram_url: instagramUrl.trim(),
             whatsapp: whatsapp.trim(),
@@ -243,15 +254,23 @@ export default function ConfiguracionPage() {
         setBusiness(result.business);
 
         setName(result.business.name || "");
+
+        setBusinessType(
+          result.business.business_type || "other"
+        );
+
         setGoogleUrl(
           result.business.google_url || ""
         );
+
         setInstagramUrl(
           result.business.instagram_url || ""
         );
+
         setWhatsapp(
           result.business.whatsapp || ""
         );
+
         setLogoUrl(
           result.business.logo_url || ""
         );
@@ -435,6 +454,7 @@ export default function ConfiguracionPage() {
                 </div>
 
                 <div>
+
                   <h3 className="text-base font-semibold tracking-tight sm:text-lg">
                     Información del negocio
                   </h3>
@@ -442,6 +462,7 @@ export default function ConfiguracionPage() {
                   <p className="mt-1 text-[11px] leading-5 text-neutral-500 sm:text-xs">
                     Estos datos se utilizan en tu página pública de GuestTap.
                   </p>
+
                 </div>
 
               </div>
@@ -486,6 +507,107 @@ export default function ConfiguracionPage() {
 
                   <p className="mt-1.5 text-[10px] text-neutral-400">
                     Este nombre aparecerá en tu página pública.
+                  </p>
+
+                </div>
+
+                {/* TIPO DE NEGOCIO */}
+
+                <div>
+
+                  <label
+                    htmlFor="business-type"
+                    className="text-xs font-semibold text-neutral-800"
+                  >
+                    Tipo de negocio
+                  </label>
+
+                  <div className="relative mt-2">
+
+                    <select
+                      id="business-type"
+                      value={businessType}
+                      onChange={(e) =>
+                        setBusinessType(e.target.value)
+                      }
+                      className="w-full appearance-none rounded-xl border border-neutral-200 bg-white px-4 py-3.5 pr-10 text-sm outline-none transition focus:border-neutral-950 focus:ring-2 focus:ring-neutral-950/5"
+                    >
+                      <option value="hotel">
+                        Hotel / alojamiento
+                      </option>
+
+                      <option value="restaurant">
+                        Restaurante
+                      </option>
+
+                      <option value="bar">
+                        Bar
+                      </option>
+
+                      <option value="cafe">
+                        Cafetería
+                      </option>
+
+                      <option value="retail">
+                        Comercio / local
+                      </option>
+
+                      <option value="clothing">
+                        Indumentaria
+                      </option>
+
+                      <option value="beauty">
+                        Belleza / estética
+                      </option>
+
+                      <option value="hairdresser">
+                        Peluquería / barbería
+                      </option>
+
+                      <option value="workshop">
+                        Taller / reparación
+                      </option>
+
+                      <option value="professional">
+                        Profesional / consultoría
+                      </option>
+
+                      <option value="health">
+                        Salud
+                      </option>
+
+                      <option value="tourism">
+                        Turismo / excursiones
+                      </option>
+
+                      <option value="services">
+                        Servicios
+                      </option>
+
+                      <option value="other">
+                        Otro
+                      </option>
+                    </select>
+
+                    <div className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400">
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </div>
+
+                  </div>
+
+                  <p className="mt-1.5 text-[10px] leading-4 text-neutral-400">
+                    GuestTap usará este contexto para interpretar mejor el feedback de tus clientes.
                   </p>
 
                 </div>

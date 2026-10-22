@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../../lib/supabase";
 
 const PRODUCTION_URL = "https://guesttap-five.vercel.app";
@@ -19,21 +19,38 @@ type Feedback = {
   created_at: string;
 };
 
+type Intelligence = {
+  totalAnalyses: number;
+  primaryInsight: {
+    type:
+      | "attention"
+      | "strength"
+      | "emerging"
+      | "observation";
+    title: string;
+    description: string;
+    metric: string;
+    supporting: string;
+    confidence: number;
+  } | null;
+};
+
 function Icon({
   name,
   size = 20,
 }: {
   name:
     | "home"
-    | "star"
+    | "message"
     | "qr"
     | "settings"
     | "external"
     | "arrow"
-    | "message"
-    | "thumb"
+    | "star"
+    | "scan"
+    | "insight"
     | "check"
-    | "activity";
+    | "trend";
   size?: number;
 }) {
   const common = {
@@ -57,10 +74,11 @@ function Icon({
         </svg>
       );
 
-    case "star":
+    case "message":
       return (
         <svg {...common}>
-          <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
+          <path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-4-.9L4 20l1.2-3.6A7.3 7.3 0 0 1 4.5 12 7.5 7.5 0 0 1 12 4.5c4.1 0 7.5 3.1 8 7Z" />
+          <path d="M8 12h.01M12 12h.01M16 12h.01" />
         </svg>
       );
 
@@ -80,7 +98,7 @@ function Icon({
       return (
         <svg {...common}>
           <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2.5V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H6v-2.5h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.5v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v2.5H21a1.7 1.7 0 0 0-1.6 1Z" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-1.8 1.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-2.5V20a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-1.8-1.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H6v-2.5h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 1.8-1.8.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6V5h2.5v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 1.8 1.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 .3 1.9 1.7 1.7 0 0 0 1.6 1h.2v2.5H21a1.7 1.7 0 0 0-1.6 1Z" />
         </svg>
       );
 
@@ -93,20 +111,36 @@ function Icon({
         </svg>
       );
 
-    case "message":
+    case "star":
       return (
         <svg {...common}>
-          <path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-4-.9L4 20l1.2-3.6A7.3 7.3 0 0 1 4.5 12 7.5 7.5 0 0 1 12 4.5c4.1 0 7.5 3.1 8 7Z" />
-          <path d="M8 12h.01M12 12h.01M16 12h.01" />
+          <path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9L12 3Z" />
         </svg>
       );
 
-    case "thumb":
+    case "scan":
       return (
         <svg {...common}>
-          <path d="M7 10v10" />
-          <path d="M3 10h4v10H3z" />
-          <path d="M7 10l4-7c.4-.7 1.5-.4 1.5.4V7h5.2a2 2 0 0 1 2 2.3l-1 7a2 2 0 0 1-2 1.7H7" />
+          <path d="M7 3H5a2 2 0 0 0-2 2v2" />
+          <path d="M17 3h2a2 2 0 0 1 2 2v2" />
+          <path d="M21 17v2a2 2 0 0 1-2 2h-2" />
+          <path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+          <path d="M7 7h10v10H7z" />
+        </svg>
+      );
+
+    case "insight":
+      return (
+        <svg {...common}>
+          <path d="M12 3v3" />
+          <path d="M12 18v3" />
+          <path d="m4.9 4.9 2.1 2.1" />
+          <path d="m17 17 2.1 2.1" />
+          <path d="M3 12h3" />
+          <path d="M18 12h3" />
+          <path d="m4.9 19.1 2.1-2.1" />
+          <path d="m17 7 2.1-2.1" />
+          <circle cx="12" cy="12" r="4" />
         </svg>
       );
 
@@ -117,10 +151,11 @@ function Icon({
         </svg>
       );
 
-    case "activity":
+    case "trend":
       return (
         <svg {...common}>
-          <path d="M3 12h4l2-7 4 14 2-7h6" />
+          <path d="M3 17 9 11l4 4 8-9" />
+          <path d="M16 6h5v5" />
         </svg>
       );
 
@@ -136,14 +171,15 @@ function Icon({
 
 function RatingStars({ rating }: { rating: number }) {
   return (
-    <div
-      className="flex items-center gap-0.5"
-      aria-label={`${rating} de 5 estrellas`}
-    >
+    <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((star) => (
         <span
           key={star}
-          className={star <= rating ? "text-neutral-950" : "text-neutral-200"}
+          className={
+            star <= rating
+              ? "text-[#E3A72F]"
+              : "text-neutral-200"
+          }
         >
           ★
         </span>
@@ -159,10 +195,22 @@ function formatDate(date: string) {
   });
 }
 
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("es-AR").format(value);
+}
+
 export default function PanelPage() {
-  const [business, setBusiness] = useState<Business | null>(null);
-  const [feedback, setFeedback] = useState<Feedback[]>([]);
+  const [business, setBusiness] =
+    useState<Business | null>(null);
+
+  const [feedback, setFeedback] =
+    useState<Feedback[]>([]);
+
   const [scanCount, setScanCount] = useState(0);
+
+  const [intelligence, setIntelligence] =
+    useState<Intelligence | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -174,98 +222,194 @@ export default function PanelPage() {
     setLoading(true);
     setError("");
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      setError("No hay una sesión iniciada.");
-      setLoading(false);
-      return;
-    }
+      if (!user) {
+        setError("No hay una sesión iniciada.");
+        return;
+      }
 
-    const { data: businessUser, error: businessUserError } =
-      await supabase
+      const {
+        data: businessUser,
+        error: businessUserError,
+      } = await supabase
         .from("business_users")
         .select("business_id")
         .eq("user_id", user.id)
         .single();
 
-    if (businessUserError || !businessUser) {
-      console.error(businessUserError);
-      setError("No encontramos un negocio asociado a tu cuenta.");
-      setLoading(false);
-      return;
-    }
+      if (businessUserError || !businessUser) {
+        console.error(businessUserError);
+        setError(
+          "No encontramos un negocio asociado a tu cuenta."
+        );
+        return;
+      }
 
-    const { data: businessData, error: businessError } =
-      await supabase
+      const {
+        data: businessData,
+        error: businessError,
+      } = await supabase
         .from("businesses")
         .select("id, name, slug, logo_url")
         .eq("id", businessUser.business_id)
         .single();
 
-    if (businessError || !businessData) {
-      console.error(businessError);
-      setError("No pudimos cargar tu negocio.");
+      if (businessError || !businessData) {
+        console.error(businessError);
+        setError("No pudimos cargar tu negocio.");
+        return;
+      }
+
+      setBusiness(businessData);
+
+      const [
+        feedbackResult,
+        scansResult,
+        intelligenceResult,
+      ] = await Promise.all([
+        supabase
+          .from("feedback")
+          .select(
+            "id, rating, message, created_at"
+          )
+          .eq(
+            "business_id",
+            businessData.id
+          )
+          .order("created_at", {
+            ascending: false,
+          }),
+
+        supabase
+          .from("scan_events")
+          .select("id", {
+            count: "exact",
+            head: true,
+          })
+          .eq(
+            "business_id",
+            businessData.id
+          ),
+
+        fetch(
+          `/api/analytics/intelligence?businessId=${businessData.id}`,
+          {
+            cache: "no-store",
+          }
+        ),
+      ]);
+
+      if (feedbackResult.error) {
+        console.error(
+          feedbackResult.error
+        );
+        setError(
+          "No pudimos cargar las valoraciones."
+        );
+        return;
+      }
+
+      if (scansResult.error) {
+        console.error(
+          scansResult.error
+        );
+        setError(
+          "No pudimos cargar los escaneos."
+        );
+        return;
+      }
+
+      setFeedback(
+        feedbackResult.data || []
+      );
+
+      setScanCount(
+        scansResult.count || 0
+      );
+
+      if (intelligenceResult.ok) {
+        const intelligenceData =
+          await intelligenceResult.json();
+
+        if (intelligenceData.ok) {
+          setIntelligence(
+            intelligenceData
+          );
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setError(
+        "Ocurrió un error al cargar el panel."
+      );
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setBusiness(businessData);
-
-    const { data: feedbackData, error: feedbackError } =
-      await supabase
-        .from("feedback")
-        .select("id, rating, message, created_at")
-        .eq("business_id", businessData.id)
-        .order("created_at", { ascending: false });
-
-    if (feedbackError) {
-      console.error(feedbackError);
-      setError("No pudimos cargar las valoraciones.");
-      setLoading(false);
-      return;
-    }
-
-    setFeedback(feedbackData || []);
-
-    const { count, error: scanError } = await supabase
-      .from("scan_events")
-      .select("id", { count: "exact", head: true })
-      .eq("business_id", businessData.id);
-
-    if (scanError) {
-      console.error(scanError);
-      setError("No pudimos cargar los escaneos.");
-      setLoading(false);
-      return;
-    }
-
-    setScanCount(count ?? 0);
-    setLoading(false);
   }
 
-  const promedio =
-    feedback.length > 0
-      ? (
-          feedback.reduce((total, item) => total + item.rating, 0) /
-          feedback.length
-        ).toFixed(1)
-      : "0.0";
+  const averageRating = useMemo(() => {
+    if (feedback.length === 0) {
+      return "0.0";
+    }
 
-  const positivas =
-    feedback.length > 0
-      ? Math.round(
-          (feedback.filter((item) => item.rating >= 4).length /
-            feedback.length) *
-            100
-        )
-      : 0;
+    return (
+      feedback.reduce(
+        (total, item) =>
+          total + item.rating,
+        0
+      ) / feedback.length
+    ).toFixed(1);
+  }, [feedback]);
 
-  const feedbackPrivado = feedback.filter(
-    (item) => item.message && item.message.trim() !== ""
-  ).length;
+  const positivePercentage = useMemo(() => {
+    if (feedback.length === 0) {
+      return 0;
+    }
+
+    return Math.round(
+      (feedback.filter(
+        (item) => item.rating >= 4
+      ).length /
+        feedback.length) *
+        100
+    );
+  }, [feedback]);
+
+  const attentionPercentage = useMemo(() => {
+    if (feedback.length === 0) {
+      return 0;
+    }
+
+    return Math.round(
+      (feedback.filter(
+        (item) => item.rating <= 2
+      ).length /
+        feedback.length) *
+        100
+    );
+  }, [feedback]);
+
+  const privateFeedback = useMemo(() => {
+    return feedback.filter(
+      (item) =>
+        item.message &&
+        item.message.trim() !== ""
+    ).length;
+  }, [feedback]);
+
+  const conversion = useMemo(() => {
+    if (scanCount === 0) {
+      return 0;
+    }
+
+    return Math.round(
+      (feedback.length / scanCount) * 100
+    );
+  }, [feedback.length, scanCount]);
 
   const publicUrl = business
     ? `${PRODUCTION_URL}/${business.slug}`
@@ -273,25 +417,23 @@ export default function PanelPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#f6f6f4] p-3 sm:p-5">
+      <main className="min-h-screen bg-[#F6F6F4] p-3 sm:p-5">
         <div className="mx-auto max-w-[1440px]">
-          <div className="min-h-[calc(100vh-24px)] overflow-hidden rounded-[28px] border border-neutral-200 bg-white sm:min-h-[calc(100vh-40px)]">
-            <div className="animate-pulse p-5 sm:p-8">
+          <div className="min-h-[calc(100vh-24px)] overflow-hidden rounded-[28px] border border-neutral-200 bg-white p-5 sm:min-h-[calc(100vh-40px)] sm:p-8">
+            <div className="animate-pulse">
               <div className="h-10 w-48 rounded-xl bg-neutral-200" />
               <div className="mt-3 h-4 w-72 rounded bg-neutral-100" />
-
-              <div className="mt-8 h-52 rounded-3xl bg-neutral-100" />
-
+              <div className="mt-8 h-56 rounded-[26px] bg-neutral-100" />
               <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-                {[1, 2, 3, 4].map((item) => (
-                  <div
-                    key={item}
-                    className="h-28 rounded-2xl bg-neutral-100"
-                  />
-                ))}
+                {[1, 2, 3, 4].map(
+                  (item) => (
+                    <div
+                      key={item}
+                      className="h-32 rounded-2xl bg-neutral-100"
+                    />
+                  )
+                )}
               </div>
-
-              <div className="mt-5 h-80 rounded-2xl bg-neutral-100" />
             </div>
           </div>
         </div>
@@ -299,36 +441,39 @@ export default function PanelPage() {
     );
   }
 
-  if (error) {
+  if (error || !business) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#f6f6f4] px-5">
-        <div className="w-full max-w-md rounded-3xl border border-neutral-200 bg-white p-8 text-center shadow-sm">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-black text-xl font-bold text-white">
+      <main className="flex min-h-screen items-center justify-center bg-[#F6F6F4] px-5">
+        <div className="w-full max-w-md rounded-[28px] border border-neutral-200 bg-white p-8 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#173F53] text-xl font-bold text-white">
             G
           </div>
 
-          <h1 className="mt-6 text-xl font-semibold text-neutral-950">
+          <h1 className="mt-6 text-xl font-semibold">
             No pudimos cargar el panel
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-neutral-500">
-            {error}
+            {error ||
+              "No encontramos información del negocio."}
           </p>
         </div>
       </main>
     );
   }
 
-  if (!business) {
-    return null;
-  }
-
   const navigation = [
     {
       href: "/panel",
-      label: "Resumen",
+      label: "Inicio",
       icon: "home" as const,
       active: true,
+    },
+    {
+      href: "/panel/analytics",
+      label: "Analytics",
+      icon: "trend" as const,
+      active: false,
     },
     {
       href: "/panel/feedback",
@@ -338,7 +483,7 @@ export default function PanelPage() {
     },
     {
       href: "/panel/qr",
-      label: "Mi QR",
+      label: "QR / NFC",
       icon: "qr" as const,
       active: false,
     },
@@ -350,22 +495,25 @@ export default function PanelPage() {
     },
   ];
 
+  const insight =
+    intelligence?.primaryInsight;
+
   return (
-    <main className="min-h-screen bg-[#f6f6f4] text-neutral-950">
+    <main className="min-h-screen bg-[#F6F6F4] text-[#183B4E]">
       <div className="mx-auto max-w-[1440px] p-0 sm:p-4 lg:p-5">
         <div className="flex min-h-screen overflow-hidden bg-white sm:min-h-[calc(100vh-32px)] sm:rounded-[30px] sm:border sm:border-neutral-200 sm:shadow-[0_12px_50px_rgba(0,0,0,0.045)]">
 
           {/* SIDEBAR */}
 
-          <aside className="hidden w-[235px] shrink-0 border-r border-neutral-200 bg-[#fafaf9] md:flex md:flex-col">
+          <aside className="hidden w-[245px] shrink-0 border-r border-neutral-200 bg-[#FAFAF9] md:flex md:flex-col">
             <div className="px-6 py-7">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-black text-sm font-bold text-white">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#173F53] text-sm font-bold text-white">
                   G
                 </div>
 
                 <div>
-                  <p className="text-sm font-bold tracking-tight">
+                  <p className="text-sm font-bold tracking-tight text-[#183B4E]">
                     GuestTap
                   </p>
 
@@ -382,20 +530,25 @@ export default function PanelPage() {
               </p>
 
               <nav className="space-y-1">
-                {navigation.map((item) => (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${
-                      item.active
-                        ? "bg-black font-semibold text-white"
-                        : "font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950"
-                    }`}
-                  >
-                    <Icon name={item.icon} size={17} />
-                    {item.label}
-                  </a>
-                ))}
+                {navigation.map(
+                  (item) => (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${
+                        item.active
+                          ? "bg-[#173F53] font-semibold text-white"
+                          : "font-medium text-neutral-500 hover:bg-neutral-100 hover:text-[#183B4E]"
+                      }`}
+                    >
+                      <Icon
+                        name={item.icon}
+                        size={17}
+                      />
+                      {item.label}
+                    </a>
+                  )
+                )}
               </nav>
             </div>
 
@@ -410,7 +563,9 @@ export default function PanelPage() {
                     />
                   ) : (
                     <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-neutral-100 text-sm font-bold">
-                      {business.name.charAt(0).toUpperCase()}
+                      {business.name
+                        .charAt(0)
+                        .toUpperCase()}
                     </div>
                   )}
 
@@ -420,7 +575,7 @@ export default function PanelPage() {
                     </p>
 
                     <div className="mt-1 flex items-center gap-1.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#25B7A4]" />
                       <span className="text-[10px] text-neutral-400">
                         Cuenta activa
                       </span>
@@ -433,10 +588,13 @@ export default function PanelPage() {
                 href={publicUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center justify-between rounded-xl bg-black px-4 py-3.5 text-xs font-semibold text-white transition hover:bg-neutral-800"
+                className="flex items-center justify-between rounded-xl bg-[#173F53] px-4 py-3.5 text-xs font-semibold text-white transition hover:bg-[#214F65]"
               >
-                <span>Ver página pública</span>
-                <Icon name="external" size={15} />
+                Ver página pública
+                <Icon
+                  name="external"
+                  size={15}
+                />
               </a>
             </div>
           </aside>
@@ -454,8 +612,10 @@ export default function PanelPage() {
                       className="h-10 w-10 shrink-0 rounded-xl object-cover ring-1 ring-black/10 sm:h-11 sm:w-11"
                     />
                   ) : (
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-black text-base font-bold text-white sm:h-11 sm:w-11 sm:text-lg">
-                      {business.name.charAt(0).toUpperCase()}
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#173F53] text-base font-bold text-white sm:h-11 sm:w-11">
+                      {business.name
+                        .charAt(0)
+                        .toUpperCase()}
                     </div>
                   )}
 
@@ -464,7 +624,7 @@ export default function PanelPage() {
                       Tu negocio
                     </p>
 
-                    <h1 className="truncate text-base font-semibold tracking-tight sm:text-xl">
+                    <h1 className="truncate text-base font-semibold tracking-tight text-[#183B4E] sm:text-xl">
                       {business.name}
                     </h1>
                   </div>
@@ -474,473 +634,596 @@ export default function PanelPage() {
                   href={publicUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex shrink-0 items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-[11px] font-semibold text-neutral-900 transition hover:bg-neutral-50 sm:px-4 sm:text-xs"
+                  className="flex shrink-0 items-center gap-1.5 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-[11px] font-semibold text-[#183B4E] transition hover:bg-neutral-50 sm:px-4 sm:text-xs"
                 >
-                  <span className="hidden sm:inline">Ver página</span>
-                  <span className="sm:hidden">Página</span>
-                  <Icon name="external" size={13} />
+                  <span className="hidden sm:inline">
+                    Ver página
+                  </span>
+
+                  <span className="sm:hidden">
+                    Página
+                  </span>
+
+                  <Icon
+                    name="external"
+                    size={13}
+                  />
                 </a>
               </div>
 
-              <nav className="-mx-1 mt-4 flex gap-1 overflow-x-auto px-1 pb-0.5 md:hidden">
-                {navigation.map((item) => (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] ${
-                      item.active
-                        ? "bg-black font-semibold text-white"
-                        : "font-medium text-neutral-500 hover:bg-neutral-100"
-                    }`}
-                  >
-                    <Icon name={item.icon} size={14} />
-                    {item.label}
-                  </a>
-                ))}
+              <nav className="-mx-1 mt-4 flex gap-1 overflow-x-auto px-1 md:hidden">
+                {navigation.map(
+                  (item) => (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2.5 text-[11px] ${
+                        item.active
+                          ? "bg-[#173F53] font-semibold text-white"
+                          : "font-medium text-neutral-500 hover:bg-neutral-100"
+                      }`}
+                    >
+                      <Icon
+                        name={item.icon}
+                        size={14}
+                      />
+                      {item.label}
+                    </a>
+                  )
+                )}
               </nav>
             </header>
 
             <div className="px-4 py-6 sm:px-7 sm:py-9 lg:px-9">
               <div className="mx-auto max-w-[1180px]">
 
-                {/* INTRO */}
+                {/* HERO */}
 
                 <section>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                      <p className="text-[11px] font-medium text-neutral-400 sm:text-xs">
-                        Resumen
-                      </p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6E8086]">
+                    Inicio
+                  </p>
 
-                      <h2 className="mt-1 text-[28px] font-semibold tracking-[-0.04em] sm:text-4xl">
-                        Tu reputación
+                  <div className="mt-2 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                      <h2 className="text-[31px] font-semibold tracking-[-0.045em] text-[#183B4E] sm:text-[42px]">
+                        Tu experiencia,
+                        <br className="hidden sm:block" />
+                        {" "}en una sola vista.
                       </h2>
 
-                      <p className="mt-1.5 max-w-xl text-xs leading-5 text-neutral-500 sm:text-sm sm:leading-6">
-                        Una vista general de la experiencia que están teniendo tus clientes.
+                      <p className="mt-3 max-w-[650px] text-sm leading-6 text-[#718087] sm:text-[15px]">
+                        GuestTap reúne lo que tus clientes
+                        están diciendo, cómo evoluciona la
+                        experiencia y qué merece tu atención.
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2 text-[11px] text-neutral-400">
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                      Todo funcionando
+                    <div className="flex items-center gap-2 rounded-full border border-[#DCE6E1] bg-[#F4F8F5] px-3.5 py-2 text-[10px] font-semibold text-[#47707E]">
+                      <span className="h-1.5 w-1.5 rounded-full bg-[#25B7A4]" />
+                      GuestTap activo
                     </div>
                   </div>
                 </section>
 
                 {/* REPUTACIÓN */}
 
-                <section className="mt-6 overflow-hidden rounded-[22px] bg-[#111111] text-white sm:mt-8 sm:rounded-[26px]">
-                  <div className="p-5 sm:p-7 lg:p-8">
-                    <div className="grid gap-7 md:grid-cols-[1.15fr_0.85fr] md:gap-0">
+                <section className="mt-7 overflow-hidden rounded-[26px] bg-[#173F53] text-white">
+                  <div className="grid lg:grid-cols-[1.15fr_0.85fr]">
+                    <div className="p-6 sm:p-8 lg:border-r lg:border-white/10">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.19em] text-white/45">
+                        Reputación actual
+                      </p>
 
-                      <div className="md:border-r md:border-white/10 md:pr-8">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/35 sm:text-[10px]">
-                          Reputación actual
+                      <div className="mt-5 flex items-end gap-5">
+                        <div>
+                          <p className="text-[58px] font-semibold leading-none tracking-[-0.07em] sm:text-[72px]">
+                            {averageRating}
+                          </p>
+
+                          <p className="mt-2 text-[10px] text-white/45 sm:text-xs">
+                            promedio sobre 5
+                          </p>
+                        </div>
+
+                        <div className="pb-1">
+                          <RatingStars
+                            rating={Math.round(
+                              Number(
+                                averageRating
+                              )
+                            )}
+                          />
+
+                          <p className="mt-2 text-[10px] text-white/45 sm:text-xs">
+                            {formatNumber(
+                              feedback.length
+                            )}{" "}
+                            {feedback.length === 1
+                              ? "valoración"
+                              : "valoraciones"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 border-t border-white/10 lg:border-t-0">
+                      <div className="border-r border-white/10 p-6 sm:p-8">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/40">
+                          Positivas
                         </p>
 
-                        <div className="mt-5 flex items-end gap-4 sm:mt-7 sm:gap-6">
-                          <div>
-                            <p className="text-[56px] font-semibold leading-none tracking-[-0.07em] sm:text-7xl">
-                              {promedio}
-                            </p>
+                        <p className="mt-4 text-3xl font-semibold sm:text-4xl">
+                          {positivePercentage}%
+                        </p>
 
-                            <p className="mt-1.5 text-[10px] text-white/40 sm:text-xs">
-                              promedio sobre 5
-                            </p>
-                          </div>
-
-                          <div className="pb-1">
-                            <div className="text-lg tracking-[2px] sm:text-xl sm:tracking-[3px]">
-                              <span className="text-white">
-                                {"★".repeat(
-                                  Math.min(
-                                    5,
-                                    Math.max(0, Math.round(Number(promedio)))
-                                  )
-                                )}
-                              </span>
-
-                              <span className="text-white/15">
-                                {"★".repeat(
-                                  5 -
-                                    Math.min(
-                                      5,
-                                      Math.max(
-                                        0,
-                                        Math.round(Number(promedio))
-                                      )
-                                    )
-                                )}
-                              </span>
-                            </div>
-
-                            <p className="mt-1 text-[10px] text-white/40 sm:text-xs">
-                              {feedback.length}{" "}
-                              {feedback.length === 1
-                                ? "valoración"
-                                : "valoraciones"}
-                            </p>
-                          </div>
-                        </div>
+                        <p className="mt-1.5 text-[10px] text-white/40 sm:text-xs">
+                          4 y 5 estrellas
+                        </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-0 md:pl-8">
-                        <div className="border-r border-white/10 pr-4 sm:pr-8">
-                          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
-                            Positivas
-                          </p>
+                      <div className="p-6 sm:p-8">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/40">
+                          Atención
+                        </p>
 
-                          <p className="mt-4 text-3xl font-semibold tracking-tight sm:mt-5 sm:text-4xl">
-                            {positivas}%
-                          </p>
+                        <p className="mt-4 text-3xl font-semibold sm:text-4xl">
+                          {attentionPercentage}%
+                        </p>
 
-                          <p className="mt-1.5 text-[10px] text-white/40 sm:text-xs">
-                            4 y 5 estrellas
-                          </p>
-                        </div>
-
-                        <div className="pl-4 sm:pl-8">
-                          <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-white/30 sm:text-[10px]">
-                            Feedback
-                          </p>
-
-                          <p className="mt-4 text-3xl font-semibold tracking-tight sm:mt-5 sm:text-4xl">
-                            {feedbackPrivado}
-                          </p>
-
-                          <p className="mt-1.5 text-[10px] text-white/40 sm:text-xs">
-                            comentarios privados
-                          </p>
-                        </div>
+                        <p className="mt-1.5 text-[10px] text-white/40 sm:text-xs">
+                          1 y 2 estrellas
+                        </p>
                       </div>
-
                     </div>
                   </div>
                 </section>
 
                 {/* MÉTRICAS */}
 
-                <section className="mt-4 grid grid-cols-2 gap-3 sm:mt-5 sm:grid-cols-4 sm:gap-4">
-
-                  {/* VALORACIONES */}
-
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-medium text-neutral-500 sm:text-xs">
-                        Valoraciones
-                      </p>
-
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 sm:h-8 sm:w-8">
-                        <Icon name="activity" size={14} />
-                      </div>
-                    </div>
-
-                    <p className="mt-3 text-2xl font-semibold tracking-tight sm:mt-4 sm:text-3xl">
-                      {feedback.length}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-neutral-400 sm:text-xs">
-                      recibidas
-                    </p>
-                  </div>
-
-                  {/* ESCANEOS */}
-
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-medium text-neutral-500 sm:text-xs">
-                        Escaneos
-                      </p>
-
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 sm:h-8 sm:w-8">
-                        <Icon name="qr" size={14} />
-                      </div>
-                    </div>
-
-                    <p className="mt-3 text-2xl font-semibold tracking-tight sm:mt-4 sm:text-3xl">
-                      {scanCount}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-neutral-400 sm:text-xs">
-                      accesos mediante QR
-                    </p>
-                  </div>
-
-                  {/* FEEDBACK */}
-
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-4 sm:p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-medium text-neutral-500 sm:text-xs">
-                        Feedback privado
-                      </p>
-
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 sm:h-8 sm:w-8">
-                        <Icon name="message" size={14} />
-                      </div>
-                    </div>
-
-                    <p className="mt-3 text-2xl font-semibold tracking-tight sm:mt-4 sm:text-3xl">
-                      {feedbackPrivado}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-neutral-400 sm:text-xs">
-                      comentarios
-                    </p>
-                  </div>
-
-                  {/* ESTADO */}
-
-                  <div className="col-span-2 rounded-2xl border border-neutral-200 bg-white p-4 sm:col-span-1 sm:p-5">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-medium text-neutral-500 sm:text-xs">
-                        Estado
-                      </p>
-
-                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700 sm:h-8 sm:w-8">
-                        <Icon name="check" size={14} />
-                      </div>
-                    </div>
-
-                    <div className="mt-3 flex items-baseline gap-2 sm:mt-4">
-                      <p className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                        Activo
-                      </p>
-
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                    </div>
-
-                    <p className="mt-1 text-[10px] text-neutral-400 sm:text-xs">
-                      Tu GuestTap funciona correctamente
-                    </p>
-                  </div>
-
-                </section>
-
-                {/* ACTIVIDAD */}
-
-                <section className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_310px] lg:gap-5">
-
-                  <div className="overflow-hidden rounded-[22px] border border-neutral-200 bg-white">
-                    <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4.5 sm:px-6 sm:py-5">
-                      <div>
-                        <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-neutral-400 sm:text-[10px]">
-                          Actividad
+                <section className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+                  {[
+                    {
+                      label: "Escaneos",
+                      value: scanCount,
+                      description:
+                        "interacciones registradas",
+                      icon: "scan" as const,
+                    },
+                    {
+                      label: "Valoraciones",
+                      value: feedback.length,
+                      description:
+                        "respuestas recibidas",
+                      icon: "star" as const,
+                    },
+                    {
+                      label: "Feedback",
+                      value: privateFeedback,
+                      description:
+                        "comentarios escritos",
+                      icon: "message" as const,
+                    },
+                    {
+                      label: "Conversión",
+                      value: `${conversion}%`,
+                      description:
+                        "scan → valoración",
+                      icon: "trend" as const,
+                    },
+                  ].map((metric) => (
+                    <div
+                      key={metric.label}
+                      className="rounded-[21px] border border-neutral-200 bg-white p-4 sm:p-5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[#7C8A90]">
+                          {metric.label}
                         </p>
 
-                        <h3 className="mt-1 text-base font-semibold tracking-tight sm:text-lg">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#F2F5F3] text-[#53656C]">
+                          <Icon
+                            name={metric.icon}
+                            size={15}
+                          />
+                        </div>
+                      </div>
+
+                      <p className="mt-4 text-2xl font-semibold tracking-tight text-[#183B4E] sm:text-3xl">
+                        {typeof metric.value ===
+                        "number"
+                          ? formatNumber(
+                              metric.value
+                            )
+                          : metric.value}
+                      </p>
+
+                      <p className="mt-1 text-[10px] leading-4 text-[#8A969B] sm:text-xs">
+                        {metric.description}
+                      </p>
+                    </div>
+                  ))}
+                </section>
+
+                {/* INTELLIGENCE */}
+
+                <section className="mt-5 overflow-hidden rounded-[26px] border border-[#CFE2DE] bg-[#F1F9F7]">
+                  <div className="border-b border-[#D5E7E3] p-6 sm:p-8">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#173F53] text-white">
+                          <Icon
+                            name="insight"
+                            size={20}
+                          />
+                        </div>
+
+                        <div>
+                          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#47707E]">
+                            GuestTap Intelligence
+                          </p>
+
+                          <h3 className="mt-1 text-[20px] font-bold tracking-tight text-[#173F53]">
+                            Lo que merece tu atención.
+                          </h3>
+                        </div>
+                      </div>
+
+                      <a
+                        href="/panel/analytics"
+                        className="inline-flex items-center gap-1.5 self-start rounded-xl border border-[#CFE2DE] bg-white px-3.5 py-2.5 text-[10px] font-semibold text-[#173F53] transition hover:bg-[#F8FBF9]"
+                      >
+                        Ver análisis completo
+                        <Icon
+                          name="arrow"
+                          size={13}
+                        />
+                      </a>
+                    </div>
+
+                    <p className="mt-4 max-w-[720px] text-xs leading-5 text-[#607781] sm:text-sm">
+                      GuestTap agrupa señales provenientes de
+                      comentarios reales. Una observación aislada
+                      no se convierte automáticamente en un problema.
+                    </p>
+                  </div>
+
+                  <div className="p-5 sm:p-7">
+                    {insight ? (
+                      <div className="rounded-[22px] border border-[#D8E5E1] bg-white p-5 sm:p-6">
+                        <div className="flex items-start gap-4">
+                          <div
+                            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                              insight.type ===
+                              "attention"
+                                ? "bg-[#FBE8E3] text-[#C75E4B]"
+                                : insight.type ===
+                                    "strength"
+                                  ? "bg-[#E3F5F0] text-[#168F7F]"
+                                  : "bg-[#E8F0F4] text-[#183B4E]"
+                            }`}
+                          >
+                            <Icon
+                              name={
+                                insight.type ===
+                                "attention"
+                                  ? "trend"
+                                  : "insight"
+                              }
+                              size={18}
+                            />
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#7C8A90]">
+                                Señal detectada
+                              </p>
+
+                              <span className="rounded-full bg-[#F3F6F4] px-2.5 py-1 text-[8px] font-bold uppercase tracking-[0.1em] text-[#718087]">
+                                {insight.type ===
+                                "attention"
+                                  ? "Atención"
+                                  : insight.type ===
+                                      "strength"
+                                    ? "Fortaleza"
+                                    : "Emergente"}
+                              </span>
+                            </div>
+
+                            <h4 className="mt-2 text-lg font-bold tracking-tight text-[#173F53] sm:text-xl">
+                              {insight.title}
+                            </h4>
+
+                            <p className="mt-2 max-w-[760px] text-xs leading-5 text-[#687A82] sm:text-sm">
+                              {insight.description}
+                            </p>
+
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <span className="rounded-full bg-[#F5F8F6] px-3 py-1.5 text-[9px] font-semibold text-[#53656C]">
+                                {insight.metric}
+                              </span>
+
+                              <span className="rounded-full bg-[#F5F8F6] px-3 py-1.5 text-[9px] font-semibold text-[#53656C]">
+                                {insight.supporting}
+                              </span>
+
+                              <span className="rounded-full bg-[#E3F5F0] px-3 py-1.5 text-[9px] font-semibold text-[#168F7F]">
+                                Confianza{" "}
+                                {Math.round(
+                                  insight.confidence *
+                                    100
+                                )}
+                                %
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-[22px] border border-dashed border-[#CFE2DE] bg-white px-5 py-10 text-center">
+                        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-[#EAF4F1] text-[#47707E]">
+                          <Icon
+                            name="insight"
+                            size={18}
+                          />
+                        </div>
+
+                        <p className="mt-4 text-sm font-semibold text-[#173F53]">
+                          Todavía no hay suficiente evidencia.
+                        </p>
+
+                        <p className="mx-auto mt-2 max-w-md text-xs leading-5 text-[#718087]">
+                          A medida que lleguen comentarios,
+                          GuestTap podrá identificar patrones
+                          y señales relevantes.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                {/* ÚLTIMA ACTIVIDAD + ACCIONES */}
+
+                <section className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+
+                  <div className="overflow-hidden rounded-[24px] border border-neutral-200 bg-white">
+                    <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-5 sm:px-6">
+                      <div>
+                        <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-[#7C8A90]">
+                          Actividad reciente
+                        </p>
+
+                        <h3 className="mt-1 text-lg font-bold tracking-tight text-[#183B4E]">
                           Últimas opiniones
                         </h3>
                       </div>
 
                       <a
                         href="/panel/feedback"
-                        className="flex items-center gap-1 rounded-lg px-2 py-2 text-[10px] font-semibold text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-950 sm:px-3 sm:text-xs"
+                        className="flex items-center gap-1 rounded-lg px-2 py-2 text-[10px] font-semibold text-[#53656C] transition hover:bg-neutral-100"
                       >
-                        <span className="hidden sm:inline">Ver todas</span>
-                        <span className="sm:hidden">Todas</span>
-                        <Icon name="arrow" size={13} />
+                        Ver todas
+                        <Icon
+                          name="arrow"
+                          size={13}
+                        />
                       </a>
                     </div>
 
                     {feedback.length === 0 ? (
-                      <div className="px-5 py-14 text-center sm:px-6 sm:py-16">
-                        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-100">
-                          <Icon name="message" size={18} />
+                      <div className="px-5 py-14 text-center">
+                        <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-100 text-neutral-500">
+                          <Icon
+                            name="message"
+                            size={18}
+                          />
                         </div>
 
-                        <p className="mt-4 text-sm font-semibold">
-                          Todavía no hay opiniones
+                        <p className="mt-4 text-sm font-semibold text-[#183B4E]">
+                          Todavía no hay opiniones.
                         </p>
 
-                        <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-neutral-500">
-                          Las opiniones de tus clientes aparecerán acá.
+                        <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-[#718087]">
+                          Cuando tus clientes empiecen a responder,
+                          sus opiniones aparecerán acá.
                         </p>
                       </div>
                     ) : (
                       <div>
-                        {feedback.slice(0, 8).map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex gap-3 border-b border-neutral-100 px-5 py-4 last:border-b-0 sm:gap-4 sm:px-6 sm:py-5"
-                          >
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 text-[10px] font-semibold sm:h-10 sm:w-10 sm:text-xs">
-                              {item.rating}/5
-                            </div>
-
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                                <RatingStars rating={item.rating} />
-
-                                <span className="text-[9px] text-neutral-400 sm:text-[11px]">
-                                  {formatDate(item.created_at)}
-                                </span>
+                        {feedback
+                          .slice(0, 6)
+                          .map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex gap-3 border-b border-neutral-100 px-5 py-4 last:border-b-0 sm:gap-4 sm:px-6"
+                            >
+                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#F3F5F4] text-[10px] font-bold text-[#53656C]">
+                                {item.rating}/5
                               </div>
 
-                              <p className="mt-1.5 truncate text-xs font-medium text-neutral-800 sm:text-sm">
-                                {item.message || "Sin comentario"}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <RatingStars
+                                    rating={
+                                      item.rating
+                                    }
+                                  />
 
-                    {feedback.length > 0 && (
-                      <div className="border-t border-neutral-200 p-3 sm:hidden">
-                        <a
-                          href="/panel/feedback"
-                          className="block rounded-xl bg-neutral-100 px-4 py-3 text-center text-xs font-semibold"
-                        >
-                          Ver todas las opiniones
-                        </a>
+                                  <span className="text-[9px] text-[#8A969B]">
+                                    {formatDate(
+                                      item.created_at
+                                    )}
+                                  </span>
+                                </div>
+
+                                <p className="mt-1.5 truncate text-xs font-medium text-[#183B4E] sm:text-sm">
+                                  {item.message ||
+                                    "Sin comentario"}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
                       </div>
                     )}
                   </div>
 
-                  {/* LATERAL */}
+                  <div className="grid gap-5">
 
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
-
-                    <div className="rounded-[22px] border border-neutral-200 bg-white p-5 sm:p-6">
-                      <div className="flex items-start justify-between">
+                    <div className="rounded-[24px] border border-neutral-200 bg-white p-5 sm:p-6">
+                      <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-neutral-400 sm:text-[10px]">
+                          <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-[#7C8A90]">
                             Tu GuestTap
                           </p>
 
-                          <h3 className="mt-1 text-base font-semibold tracking-tight sm:text-lg">
+                          <h3 className="mt-1 text-lg font-bold tracking-tight text-[#183B4E]">
                             Todo funcionando
                           </h3>
                         </div>
 
-                        <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-neutral-100">
-                          <Icon name="check" size={15} />
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E7F5F1] text-[#168F7F]">
+                          <Icon
+                            name="check"
+                            size={16}
+                          />
                         </div>
                       </div>
 
                       <div className="mt-5 space-y-3">
-                        <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-                          <span className="text-[11px] text-neutral-500">
-                            Página pública
-                          </span>
+                        {[
+                          "Página pública",
+                          "Captura de feedback",
+                          "Analytics",
+                        ].map((item) => (
+                          <div
+                            key={item}
+                            className="flex items-center justify-between border-b border-neutral-100 pb-3 last:border-0 last:pb-0"
+                          >
+                            <span className="text-[11px] text-[#718087]">
+                              {item}
+                            </span>
 
-                          <span className="flex items-center gap-1.5 text-[11px] font-medium">
-                            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                            Activa
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between border-b border-neutral-100 pb-3">
-                          <span className="text-[11px] text-neutral-500">
-                            QR
-                          </span>
-
-                          <span className="flex items-center gap-1.5 text-[11px] font-medium">
-                            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                            Activo
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] text-neutral-500">
-                            Feedback
-                          </span>
-
-                          <span className="flex items-center gap-1.5 text-[11px] font-medium">
-                            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                            Activo
-                          </span>
-                        </div>
+                            <span className="flex items-center gap-1.5 text-[10px] font-semibold text-[#168F7F]">
+                              <span className="h-1.5 w-1.5 rounded-full bg-[#25B7A4]" />
+                              Activo
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
-                    <div className="rounded-[22px] bg-[#111111] p-5 text-white sm:p-6">
-                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/35 sm:text-[10px]">
+                    <div className="rounded-[24px] bg-[#173F53] p-5 text-white sm:p-6">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.17em] text-white/45">
                         Acciones rápidas
                       </p>
 
-                      <h3 className="mt-1 text-base font-semibold tracking-tight sm:text-lg">
-                        Gestioná tu cuenta
+                      <h3 className="mt-1 text-lg font-bold tracking-tight">
+                        Gestioná tu GuestTap.
                       </h3>
 
-                      <div className="mt-4 grid gap-2 sm:mt-5 lg:grid-cols-1">
+                      <div className="mt-5 space-y-2">
                         <a
                           href="/panel/qr"
-                          className="flex items-center justify-between rounded-xl bg-white/10 px-3.5 py-3 text-xs font-medium transition hover:bg-white/15"
+                          className="flex items-center justify-between rounded-xl bg-white/10 px-3.5 py-3 text-xs font-semibold transition hover:bg-white/15"
                         >
                           <span className="flex items-center gap-2.5">
-                            <Icon name="qr" size={15} />
-                            Mi QR
+                            <Icon
+                              name="qr"
+                              size={15}
+                            />
+                            QR / NFC
                           </span>
 
-                          <Icon name="arrow" size={14} />
+                          <Icon
+                            name="arrow"
+                            size={14}
+                          />
                         </a>
 
                         <a
                           href="/panel/feedback"
-                          className="flex items-center justify-between rounded-xl bg-white/10 px-3.5 py-3 text-xs font-medium transition hover:bg-white/15"
+                          className="flex items-center justify-between rounded-xl bg-white/10 px-3.5 py-3 text-xs font-semibold transition hover:bg-white/15"
                         >
                           <span className="flex items-center gap-2.5">
-                            <Icon name="message" size={15} />
+                            <Icon
+                              name="message"
+                              size={15}
+                            />
                             Feedback
                           </span>
 
-                          <Icon name="arrow" size={14} />
+                          <Icon
+                            name="arrow"
+                            size={14}
+                          />
                         </a>
 
                         <a
                           href="/panel/configuracion"
-                          className="flex items-center justify-between rounded-xl bg-white/10 px-3.5 py-3 text-xs font-medium transition hover:bg-white/15"
+                          className="flex items-center justify-between rounded-xl bg-white/10 px-3.5 py-3 text-xs font-semibold transition hover:bg-white/15"
                         >
                           <span className="flex items-center gap-2.5">
-                            <Icon name="settings" size={15} />
+                            <Icon
+                              name="settings"
+                              size={15}
+                            />
                             Configuración
                           </span>
 
-                          <Icon name="arrow" size={14} />
+                          <Icon
+                            name="arrow"
+                            size={14}
+                          />
                         </a>
                       </div>
                     </div>
                   </div>
                 </section>
 
-                {/* PÁGINA PÚBLICA */}
+                {/* CTA */}
 
-                <section className="mt-4 sm:mt-5">
+                <section className="mt-5">
                   <a
                     href={publicUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="group flex items-center justify-between rounded-[20px] border border-neutral-200 bg-white px-4 py-4 transition hover:border-neutral-300 hover:shadow-sm sm:px-6 sm:py-5"
+                    className="group flex items-center justify-between rounded-[22px] border border-[#DCE5E1] bg-[#F7FAF8] px-5 py-5 transition hover:border-[#C7D8D2] sm:px-6"
                   >
-                    <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-neutral-100 sm:h-10 sm:w-10">
-                        <Icon name="external" size={16} />
+                    <div className="flex min-w-0 items-center gap-4">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-[#53656C] shadow-sm">
+                        <Icon
+                          name="external"
+                          size={16}
+                        />
                       </div>
 
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold sm:text-sm">
-                          Página pública
+                        <p className="text-xs font-bold text-[#183B4E] sm:text-sm">
+                          Ver tu página pública
                         </p>
 
-                        <p className="mt-0.5 truncate text-[10px] text-neutral-500 sm:text-xs">
-                          Así ven tus clientes tu GuestTap.
+                        <p className="mt-0.5 truncate text-[10px] text-[#718087] sm:text-xs">
+                          Así interactúan tus clientes con GuestTap.
                         </p>
                       </div>
                     </div>
 
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-neutral-200 transition group-hover:bg-neutral-100 sm:h-9 sm:w-9">
-                      <Icon name="arrow" size={14} />
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#DCE5E1] bg-white text-[#53656C] transition group-hover:bg-[#F1F5F3]">
+                      <Icon
+                        name="arrow"
+                        size={14}
+                      />
                     </div>
                   </a>
                 </section>
 
-                <footer className="py-7 text-center sm:py-8">
-                  <p className="text-[9px] text-neutral-400 sm:text-[10px]">
-                    GuestTap · Panel de gestión
+                <footer className="py-8 text-center">
+                  <p className="text-[9px] text-[#9AA4A8] sm:text-[10px]">
+                    GuestTap · Customer Experience Intelligence
                   </p>
                 </footer>
+
               </div>
             </div>
           </div>
